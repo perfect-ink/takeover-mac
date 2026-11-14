@@ -15,6 +15,14 @@ struct AppGroup: Identifiable {
     let items: [LinkItem]
     let recipe: AppConfig?
     let installed: Bool
+
+    /// Installed only when every location is; not installed only when none is.
+    var status: LinkStatus {
+        let all = items.map { LinkItemInstaller.status($0) }
+        if all.isEmpty || all.allSatisfy({ $0 == .notInstalled }) { return .notInstalled }
+        if all.allSatisfy({ $0 == .installed }) { return .installed }
+        return .differentLocation
+    }
 }
 
 struct LinkItemListView: View {
@@ -103,6 +111,8 @@ struct LinkItemListView: View {
                         HStack {
                             Text(group.id).fontWeight(.medium)
                             Spacer()
+                            let _ = linkRefresh // re-read link status after installs
+                            LinkStatusIcon(status: group.status)
                         }
                         .padding(.vertical, 6)
                         .padding(.horizontal, 4)

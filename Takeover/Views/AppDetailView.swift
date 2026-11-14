@@ -10,13 +10,7 @@ struct AppDetailView: View {
     let onUninstall: (LinkItem) -> Void
     let onUninstallAll: ([LinkItem]) -> Void
 
-    /// Installed only when every location is; not installed only when none is.
-    private var appStatus: LinkStatus {
-        let all = group.items.map { LinkItemInstaller.status($0) }
-        if all.allSatisfy({ $0 == .installed }) { return .installed }
-        if all.allSatisfy({ $0 == .notInstalled }) { return .notInstalled }
-        return .differentLocation
-    }
+    private var appStatus: LinkStatus { group.status }
 
     private var allLinked: Bool {
         !group.items.isEmpty && group.items.allSatisfy { LinkItemInstaller.isLinked($0) }

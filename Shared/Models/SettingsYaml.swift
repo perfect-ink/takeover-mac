@@ -132,8 +132,17 @@ class SettingsManager: ObservableObject {
         }
 
         syncProfileToAccount(settings)
-        if location.provider == .takeoverCloud {
-            await TakeoverCloud.shared.push(settings)
+    }
+
+    /// Writes settings that came from the Takeover account (a newer profile
+    /// pushed by another Mac). Same as `saveSettings` but doesn't push them
+    /// back up, so two Macs never bounce the same change between them.
+    func applyFromAccount(_ settings: SettingsYaml) async throws {
+        try writeSettingsFile(settings)
+        try writeMacDefaults(settings.macDefaults ?? [])
+
+        await MainActor.run {
+            self.settings = settings
         }
     }
 
@@ -161,29 +170,8 @@ class SettingsManager: ObservableObject {
     /// otherwise. Mac-default rows are enriched with domain/key/type from the
     /// catalog so the profile is self-contained on the restoring Mac.
     private func syncProfileToAccount(_ settings: SettingsYaml) {
-        let catalog = Dictionary(
-            MacDefaultCatalog.shared.entries.map { ($0.name, $0) },
-            uniquingKeysWith: { first, _ in first }
-        )
-
-        let defaults: [Profile.MacDefaultEntry] = (settings.macDefaults ?? []).compactMap { cfg in
-            guard let value = cfg.value, !value.isEmpty, let e = catalog[cfg.name] else { return nil }
-            return Profile.MacDefaultEntry(
-                name: e.name, domain: e.domain, key: e.key, type: e.type,
-                value: value, hostFlag: e.hostFlag ?? "", postCommand: e.postCommand ?? "")
-        }
-        let links = settings.links.map {
-            Profile.LinkEntry(name: $0.name, from: $0.from, to: $0.to, defaults: $0.defaults ?? "")
-        }
-        let apps = (settings.apps ?? []).map {
-            Profile.AppEntry(
-                name: $0.name,
-                source: Profile.AppSource(rawValue: $0.source) ?? .brew,
-                cask: $0.cask, masID: $0.masID)
-        }
-        let profile = Profile(version: 1, macDefaults: defaults, links: links, apps: apps)
-
         Task { @MainActor in
+            let profile = Profile(settings: settings, catalog: MacDefaultCatalog.shared.entries)
             ProfileSyncManager.shared.schedulePush(profile)
         }
     }

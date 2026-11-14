@@ -37,7 +37,7 @@ XCODE_FLAGS ?=
 .DEFAULT_GOAL := all
 
 .PHONY: all help setup dev open close test build install uninstall reinstall \
-        package cli install-cli verify-sign reset-tcc clean
+        package cli install-cli verify-sign reset-tcc catalog clean
 
 ##@ Common
 
@@ -153,6 +153,10 @@ reset-tcc: ## Forget every TCC grant for the app (re-prompt from a clean slate).
 	@echo "TCC grants reset for $(BUNDLE_ID)."
 
 ##@ Maintenance
+
+catalog: ## Refresh the bundled offline Mac Defaults catalog from takeoverapp.site.
+	curl -fsSL https://takeoverapp.site/catalog/mac-defaults.yaml -o $(APP)/mac-defaults-catalog.yaml
+	@echo "Updated $(APP)/mac-defaults-catalog.yaml; commit it with the next release."
 
 clean: ## Clean existing builds.
 	rm -rf $(BUILD_DIR)

@@ -40,6 +40,15 @@ final class AccountManager: ObservableObject {
         APIClient.clearToken()
         currentUser = nil
         ProfileSyncManager.shared.reset()
+        TakeoverCloud.shared.clear()
+    }
+
+    /// Records a successful sign-in (from here or from Takeover Cloud's
+    /// sign-in in Storage settings) and syncs this Mac with the account.
+    func adopt(_ user: APIUser) async {
+        currentUser = user
+        await ProfileSyncManager.shared.registerThisMac()
+        await ProfileSyncManager.shared.syncNow()
     }
 
     private func run(_ call: () async throws -> AuthResponse) async {
@@ -48,8 +57,7 @@ final class AccountManager: ObservableObject {
         defer { isLoadingAuth = false }
         do {
             let response = try await call()
-            currentUser = response.user
-            await ProfileSyncManager.shared.registerThisMac()
+            await adopt(response.user)
         } catch {
             authError = error.localizedDescription
         }

@@ -59,6 +59,9 @@ struct TakeoverApp: App {
                     if !needsStorageSetup {
                         await loadFromStorage()
                     }
+                    // Push/pull with the account now, on activation, and
+                    // every few minutes (pull only for Takeover Cloud).
+                    profileSync.startAutoSync()
                 }
                 .sheet(isPresented: $needsStorageSetup) {
                     StorageSetupView(isFirstLaunch: true) {
@@ -68,6 +71,10 @@ struct TakeoverApp: App {
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .storageLocationChanged)) { _ in
                     Task { await loadFromStorage() }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .settingsPulledFromAccount)) { note in
+                    guard let settings = note.object as? SettingsYaml else { return }
+                    Task { await replaceDatabase(with: settings) }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     // The user may have just granted access in System Settings —
@@ -233,6 +240,65 @@ struct TakeoverApp: App {
         }
 
         try? context.save()
+    }
+
+    /// Makes the local lists match settings pulled from the account: rows
+    /// another Mac removed are deleted, changed rows are updated, new rows
+    /// are added. (`syncSettingsToDatabase` only ever adds.)
+    @MainActor
+    private func replaceDatabase(with settings: SettingsYaml) async {
+        let context = sharedModelContainer.mainContext
+
+        let links = Dictionary(settings.links.map { ($0.name, $0) }, uniquingKeysWith: { _, last in last })
+        for item in (try? context.fetch(FetchDescriptor<LinkItem>())) ?? [] {
+            if let config = links[item.name] {
+                item.from = expandTilde(config.from)
+                item.to = expandTilde(config.to)
+                item.defaults = config.defaults ?? ""
+            } else {
+                context.delete(item)
+            }
+        }
+
+        // Catalog rows stay (they're the list of available defaults); only
+        // their values follow the account. Custom rows not in the settings go.
+        let userDefaults = Dictionary((settings.macDefaults ?? []).map { ($0.name, $0) },
+                                      uniquingKeysWith: { _, last in last })
+        let catalogNames = Set(MacDefaultCatalog.shared.entries.map { $0.name })
+        for row in (try? context.fetch(FetchDescriptor<MacDefault>())) ?? [] {
+            if let config = userDefaults[row.name] {
+                row.value = config.value ?? ""
+                if let captured = config.capturedOSMajorVersion { row.capturedOSMajorVersion = captured }
+            } else if catalogNames.contains(row.name) {
+                row.value = ""
+            } else {
+                context.delete(row)
+            }
+        }
+
+        let installers = Dictionary((settings.appInstallers ?? []).map { ($0.name, $0) },
+                                    uniquingKeysWith: { _, last in last })
+        for installer in (try? context.fetch(FetchDescriptor<AppInstaller>())) ?? [] {
+            if let config = installers[installer.name] {
+                installer.path = expandTilde(config.path)
+            } else {
+                context.delete(installer)
+            }
+        }
+
+        let apps = Dictionary((settings.apps ?? []).map { ($0.name, $0) }, uniquingKeysWith: { _, last in last })
+        for entry in (try? context.fetch(FetchDescriptor<AppEntryModel>())) ?? [] {
+            if let config = apps[entry.name] {
+                entry.source = config.source
+                entry.cask = config.cask ?? ""
+                entry.masID = config.masID ?? ""
+            } else {
+                context.delete(entry)
+            }
+        }
+
+        try? context.save()
+        await syncSettingsToDatabase(settings: settings)
     }
 
     private func expandTilde(_ path: String) -> String {

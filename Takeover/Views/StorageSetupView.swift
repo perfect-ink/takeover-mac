@@ -168,17 +168,11 @@ struct StorageSetupView: View {
         }
     }
 
-    /// On a new Mac, seed the local copy from the account's latest profile.
+    /// On a new Mac, seed the local copy from the account's latest profile;
+    /// otherwise this Mac's settings go up as the newest copy.
     private func restoreFromCloudIfEmpty() async throws {
-        let settings = try await settingsManager.loadSettings()
-        let isEmpty = settings.links.isEmpty
-            && (settings.macDefaults ?? []).isEmpty
-            && (settings.appInstallers ?? []).isEmpty
-        if isEmpty, let restored = try await cloud.latestProfile() {
-            try await settingsManager.saveSettings(restored)
-        } else if !isEmpty {
-            await cloud.push(settings)
-        }
+        _ = try await settingsManager.loadSettings()
+        await ProfileSyncManager.shared.syncNow()
     }
 }
 
@@ -257,6 +251,7 @@ private struct DetectedRow: View {
 /// Sign-in and trial/subscription state for Takeover Cloud.
 struct CloudAccountView: View {
     @ObservedObject private var cloud = TakeoverCloud.shared
+    @ObservedObject private var sync = ProfileSyncManager.shared
     @State private var email = ""
     @State private var password = ""
     @State private var isWorking = false
@@ -274,11 +269,11 @@ struct CloudAccountView: View {
                                 .font(.caption)
                                 .foregroundColor(subscription.needsPayment ? .orange : .secondary)
                         }
-                        if let lastError = cloud.lastError {
+                        if let lastError = sync.lastPushError {
                             Text("Last sync failed: \(lastError)")
                                 .font(.caption)
                                 .foregroundColor(.red)
-                        } else if let lastSyncedAt = cloud.lastSyncedAt {
+                        } else if let lastSyncedAt = sync.lastSyncedAt {
                             Text("Last synced \(lastSyncedAt.formatted(date: .omitted, time: .shortened))")
                                 .font(.caption)
                                 .foregroundColor(.secondary)

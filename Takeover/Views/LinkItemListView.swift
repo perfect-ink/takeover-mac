@@ -209,7 +209,10 @@ struct LinkItemListView: View {
             )
         }
 
-        let settings = SettingsYaml(links: linkConfigs)
+        // Keep the rest of the settings (Mac defaults, installers, apps):
+        // saving a bare `SettingsYaml(links:)` used to wipe them.
+        var settings = SettingsManager.shared.settings ?? SettingsYaml(links: [])
+        settings.links = linkConfigs
 
         do {
             try await SettingsManager.shared.saveSettings(settings)

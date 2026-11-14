@@ -215,11 +215,14 @@ struct RestoreView: View {
         saveStateMessage = nil
         defer { isSavingState = false }
 
-        let profile = Profile.snapshot(
+        var profile = Profile.snapshot(
             defaults: currentDefaults.filter { !$0.value.isEmpty },
             links: currentLinks,
             apps: currentApps
         )
+        profile.appInstallers = SettingsManager.shared.settings?.appInstallers?.map {
+            Profile.AppInstallerEntry(name: $0.name, path: $0.path)
+        }
         await sync.push(profile)
 
         if let err = sync.lastPushError {

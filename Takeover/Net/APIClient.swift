@@ -1,17 +1,31 @@
 import Foundation
 
 /// REST client for takeover-api. JWT is kept in the Keychain. Base URL is
-/// overridable via `UserDefaults` key `takeover.apiBaseURL`. Ported/trimmed
-/// from AudioBunny's APIClient.
+/// takeoverapp.site (`Config.apiBaseURL`), overridable for local development
+/// via `UserDefaults` key `takeover.apiBaseURL` (e.g.
+/// `defaults write alexvaos.Takeover takeover.apiBaseURL http://localhost:3020/api/v1`).
+/// This is the only sign-in the app has: Account, Restore and Takeover Cloud
+/// all share this token.
 enum APIClient {
     static var baseURL: String {
-        UserDefaults.standard.string(forKey: "takeover.apiBaseURL") ?? "http://localhost:3020/api/v1"
+        UserDefaults.standard.string(forKey: "takeover.apiBaseURL")
+            ?? Config.apiBaseURL.appendingPathComponent("api/v1").absoluteString
     }
 
     private static let tokenKey = "takeover.jwt"
 
-    private static var token: String? {
-        get { KeychainStore.get(key: tokenKey) }
+    /// Takeover Cloud used to keep its own token under this Keychain account.
+    private static let legacyCloudTokenKey = "takeover-cloud-token"
+
+    private(set) static var token: String? {
+        get {
+            if let current = KeychainStore.get(key: tokenKey) { return current }
+            // One-time move of a Takeover Cloud sign-in onto the shared token.
+            guard let legacy = KeychainStore.get(key: legacyCloudTokenKey) else { return nil }
+            KeychainStore.set(legacy, key: tokenKey)
+            KeychainStore.remove(key: legacyCloudTokenKey)
+            return legacy
+        }
         set {
             if let newValue { KeychainStore.set(newValue, key: tokenKey) }
             else { KeychainStore.remove(key: tokenKey) }
@@ -67,12 +81,13 @@ enum APIClient {
         try await send("computers/\(computerID)/profile", "GET")
     }
 
+    /// Uploads this Mac's profile; returns the server's timestamp for it.
     @discardableResult
-    static func putProfile(computerID: Int, profile: Profile) async throws -> Bool {
+    static func putProfile(computerID: Int, profile: Profile) async throws -> Date? {
         var req = try makeRequest("computers/\(computerID)/profile", method: "PUT")
         req.httpBody = try JSONEncoder().encode(["profile": profile])
-        let _: OkResponse = try await perform(req)
-        return true
+        let response: PutProfileResponse = try await perform(req)
+        return response.profileUpdatedAt
     }
 
     // MARK: - Plumbing
@@ -135,7 +150,13 @@ enum APIError: LocalizedError {
     }
 }
 
-private struct OkResponse: Decodable { let ok: Bool }
+private struct PutProfileResponse: Decodable {
+    let profileUpdatedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case profileUpdatedAt = "profile_updated_at"
+    }
+}
 
 private struct APIErrorBody: Decodable {
     let message: String

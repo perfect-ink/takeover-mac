@@ -430,7 +430,7 @@ struct LinkStatusIcon: View {
             Image(systemName: "questionmark.circle.fill").foregroundColor(.orange)
                 .help("Installed at a different location")
         case .notInstalled:
-            Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
+            Image(systemName: "circle.dashed").foregroundColor(.secondary)
                 .help("Not installed")
         }
     }

@@ -327,9 +327,21 @@ private extension Set {
 struct AccountButton: View {
     @EnvironmentObject var account: AccountManager
     @Binding var showAccount: Bool
+    @State private var usesCloud = StorageLocation.current.provider == .takeoverCloud
 
     var body: some View {
-        if let user = account.currentUser {
+        Group {
+            content
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .storageLocationChanged)) { _ in
+            usesCloud = StorageLocation.current.provider == .takeoverCloud
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        if !usesCloud {
+            EmptyView()
+        } else if let user = account.currentUser {
             Menu {
                 Text(user.email)
                 Button("Sign Out") { account.signOut() }

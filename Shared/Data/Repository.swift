@@ -79,13 +79,36 @@ class Repository {
 
     private init() {}
 
-    func load() async {
+    /// Folds "X (Users)" entries into "X" as extra locations, so an app is one
+    /// entry however the catalog (or an older cached copy) lists it.
+    static func mergingVariants(_ apps: [AppConfig]) -> [AppConfig] {
+        func base(_ name: String) -> String {
+            name.hasSuffix(" (Users)") ? String(name.dropLast(" (Users)".count)) : name
+        }
+        var order: [String] = []
+        var merged: [String: AppConfig] = [:]
+        for app in apps {
+            let key = base(app.name)
+            if let existing = merged[key] {
+                var files = existing.files
+                for file in app.files where !files.contains(where: { $0.path == file.path }) { files.append(file) }
+                merged[key] = AppConfig(name: key, files: files, defaults: existing.defaults ?? app.defaults)
+            } else {
+                order.append(key)
+                merged[key] = AppConfig(name: key, files: app.files, defaults: app.defaults)
+            }
+        }
+        return order.compactMap { merged[$0] }
+    }
+
+    func load(force: Bool = false) async {
         isLoading = true
         error = nil
         defer { isLoading = false }
 
         do {
-            response = try await RemoteCatalog.load(RepositoryResponse.self, sources: sources, cacheName: "apps-catalog")
+            let loaded = try await RemoteCatalog.load(RepositoryResponse.self, sources: sources, cacheName: "apps-catalog", force: force)
+            response = RepositoryResponse(version: loaded.version, os_recipies: loaded.os_recipies, apps: Self.mergingVariants(loaded.apps))
         } catch let fetchError {
             error = fetchError
         }

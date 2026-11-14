@@ -103,64 +103,80 @@ struct RecipesView: View {
     }
 
     private func addRecipeToLinks(_ app: AppConfig) {
-        var lastCreatedItem: LinkItem?
-
-        print("DEBUG: Starting to add recipe '\(app.name)' with \(app.files.count) files")
-
-        // For each file in the recipe, create a LinkItem
-        for (index, file) in app.files.enumerated() {
-            print("DEBUG: File path from recipe: '\(file.path)'")
-
-            // Combine all defaults commands into one string
-            let defaultsCommand = app.defaults?.joined(separator: " && ") ?? ""
-
-            // Clean the app name for "to" field (remove spaces and special characters)
-            let cleanName = app.name.replacingOccurrences(of: " ", with: "")
-                .replacingOccurrences(of: "/", with: "-")
-            print("DEBUG: Clean app name for 'to' field: '\(cleanName)'")
-
-            // Create unique name if multiple files
-            var itemName = app.name
-            if app.files.count > 1 {
-                itemName = "\(app.name) (\(index + 1))"
-            }
-
-            // Ensure name is unique across all existing items
-            var uniqueName = itemName
-            var counter = 1
-            while existingLinks.contains(where: { $0.name == uniqueName }) {
-                uniqueName = "\(itemName) (\(counter))"
-                counter += 1
-            }
-
-            let newItem = LinkItem(
-                name: uniqueName,
-                from: file.path,
-                to: cleanName,
-                defaults: defaultsCommand
-            )
-
-            print("DEBUG: Created LinkItem - name: '\(newItem.name)', from: '\(newItem.from)', to: '\(newItem.to)'")
-
-            modelContext.insert(newItem)
-            lastCreatedItem = newItem
-        }
-
-        // Save and wait for completion
-        do {
-            try modelContext.save()
-            print("DEBUG: Save completed successfully")
-        } catch {
-            print("DEBUG: Save failed with error: \(error)")
-        }
-
-        // Notify parent with the last created item
-        if let item = lastCreatedItem {
-            print("DEBUG: Calling onAdd with item: '\(item.name)', from: '\(item.from)'")
+        if let item = RecipeInstaller.add(app, existing: existingLinks, context: modelContext) {
             onAdd?(item)
         }
-
         dismiss()
+    }
+}
+
+/// Helpers for turning catalog recipes into LinkItems and grouping them per app.
+enum RecipeInstaller {
+    /// "App (2)" -> "App": every sync location of an app shares its base name.
+    static func baseName(_ name: String) -> String {
+        var base = name
+        if let r = base.range(of: #" \(\d+\)$"#, options: .regularExpression) { base = String(base[..<r.lowerBound]) }
+        if base.hasSuffix(" (Users)") { base = String(base.dropLast(" (Users)".count)) }
+        return base
+    }
+
+    /// First free "App", "App (2)", "App (3)"...
+    static func uniqueName(base: String, taken: Set<String>) -> String {
+        if !taken.contains(base) { return base }
+        var n = 2
+        while taken.contains("\(base) (\(n))") { n += 1 }
+        return "\(base) (\(n))"
+    }
+
+    static func cleanName(_ name: String) -> String {
+        name.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "/", with: "-")
+    }
+
+    /// Name of the destination inside the settings folder. Apps with several
+    /// locations get one folder per location so they don't collide.
+    static func destination(for app: AppConfig, path: String) -> String {
+        let clean = cleanName(app.name)
+        guard app.files.count > 1 else { return clean }
+        let last = (path as NSString).lastPathComponent.replacingOccurrences(of: " ", with: "")
+        return "\(clean)-\(last)"
+    }
+
+    @discardableResult
+    static func addLocation(app: AppConfig, path: String, existing: [LinkItem], context: ModelContext) -> LinkItem {
+        let name = uniqueName(base: app.name, taken: Set(existing.map { $0.name }))
+        let item = LinkItem(
+            name: name,
+            from: path,
+            to: destination(for: app, path: path),
+            defaults: app.defaults?.joined(separator: " && ") ?? ""
+        )
+        context.insert(item)
+        try? context.save()
+        return item
+    }
+
+    @discardableResult
+    static func add(_ app: AppConfig, existing: [LinkItem], context: ModelContext) -> LinkItem? {
+        var all = existing
+        var last: LinkItem?
+        for file in app.files {
+            last = addLocation(app: app, path: file.path, existing: all, context: context)
+            if let last { all.append(last) }
+        }
+        return last
+    }
+
+    static func isInstalled(_ app: AppConfig) -> Bool {
+        isInstalled(name: app.name, paths: app.files.map { $0.path })
+    }
+
+    /// Best effort: an app bundle named like the app, or any of its files already on disk.
+    static func isInstalled(name: String, paths: [String]) -> Bool {
+        let fm = FileManager.default
+        let home = NSHomeDirectory()
+        let dirs = ["/Applications", "/Applications/Utilities", "/System/Applications", "\(home)/Applications"]
+        if dirs.contains(where: { fm.fileExists(atPath: "\($0)/\(name).app") }) { return true }
+        return paths.contains { fm.fileExists(atPath: PathUtility.expandTildeToRealHome($0)) }
     }
 }
 

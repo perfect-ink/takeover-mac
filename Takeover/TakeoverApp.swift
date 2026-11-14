@@ -50,15 +50,17 @@ struct TakeoverApp: App {
                 .environmentObject(account)
                 .environmentObject(profileSync)
                 .task {
+                    // Independent startup work runs side by side instead of one after another.
+                    async let catalog: Void = Repository.shared.load()
+                    async let signIn: Void = {
+                        await account.refresh()
+                        if account.isSignedIn { _ = await profileSync.registerThisMac() }
+                    }()
                     await checkPermissionsOnStartup()
-                    await Repository.shared.load()
-                    await account.refresh()
-                    if account.isSignedIn {
-                        await profileSync.registerThisMac()
-                    }
                     if !needsStorageSetup {
                         await loadFromStorage()
                     }
+                    _ = await (catalog, signIn)
                     // Push/pull with the account now, on activation, and
                     // every few minutes (pull only for Takeover Cloud).
                     profileSync.startAutoSync()
@@ -83,6 +85,7 @@ struct TakeoverApp: App {
                 }
         }
         .modelContainer(sharedModelContainer)
+        .windowStyle(.hiddenTitleBar)
 
         Settings {
             StorageSetupView(isFirstLaunch: false)

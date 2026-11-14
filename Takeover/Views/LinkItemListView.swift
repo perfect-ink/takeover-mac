@@ -9,43 +9,72 @@ import Foundation
 import SwiftUI
 import SwiftData
 
+/// One app in the sidebar: its saved sync locations plus any catalog locations not yet added.
+struct AppGroup: Identifiable {
+    let id: String
+    let items: [LinkItem]
+    let recipe: AppConfig?
+    let installed: Bool
+}
+
 struct LinkItemListView: View {
-    
+
     @Environment(\.modelContext) private var modelContext
 
-    @Query(sort: \LinkItem.name) private var linkItems: [LinkItem] // Use @Query to fetch data
-    //    var linkItems: [LinkItem] = []
-//    @Binding var linkItems: [LinkItem]
-    @State private var linkItemSelection: LinkItem? = nil
-    @State private var showRecipesView = false
-    @State private var sidebarVisible = true
+    @Query(sort: \LinkItem.name) private var linkItems: [LinkItem]
+    @State private var selection: String? = nil
+    private var repository = Repository.shared
     @State private var errorMessage: String? = nil
+    @State private var pendingUninstall: LinkItem? = nil
 
     var body: some View {
         VStack(spacing: 0) {
             TabActionBar(title: "Sync Settings") {
-                Button(action: { withAnimation { sidebarVisible.toggle() } }) {
-                    Image(systemName: "sidebar.left")
-                }
-                .buttonStyle(.plain)
-                .help("Toggle Sidebar")
-
-                Button(action: { showRecipesView = true }) {
-                    Label("Browse Recipes", systemImage: "books.vertical")
-                }
-                .help("Browse available app configurations")
-
-                Button(action: addItem) {
-                    Label("Add Item", systemImage: "plus")
-                }
+                if repository.isLoading { ProgressView().scaleEffect(0.6) }
+                Button {
+                    Task { await repository.load(force: true) }
+                } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                .help("Fetch the latest app recipes")
+                .disabled(repository.isLoading)
             }
 
-            linkItemsContent
+            HStack(spacing: 0) {
+                sidebar
+                    .frame(minWidth: 180, idealWidth: 200, maxWidth: 300)
+                Divider()
+
+                Group {
+                    if let group = groups.first(where: { $0.id == selection }) {
+                        AppDetailView(
+                            group: group,
+                            onAddLocation: { addLocation(to: group) },
+                            onSave: onSave,
+                            onRun: onRun,
+                            onDelete: onDelete,
+                            onUninstall: onUninstall
+                        )
+                        .id(group.id)
+                    } else {
+                        Text("Select an app")
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
-        .sheet(isPresented: $showRecipesView) {
-            RecipesView(onAdd: { newItem in
-                linkItemSelection = newItem
-            })
+        .task(id: repository.response?.apps.count) { seedFromCatalog() }
+        .confirmationDialog(
+            "Uninstall \(pendingUninstall?.name ?? "")?",
+            isPresented: Binding(get: { pendingUninstall != nil }, set: { if !$0 { pendingUninstall = nil } }),
+            titleVisibility: .visible,
+            presenting: pendingUninstall
+        ) { item in
+            Button("Copy from destination") { uninstall(item, mode: .copyFromDestination) }
+            Button("Move destination") { uninstall(item, mode: .moveDestination) }
+            Button("Remove link, leave empty", role: .destructive) { uninstall(item, mode: .removeLink) }
+            Button("Cancel", role: .cancel) {}
+        } message: { item in
+            Text("The link at \(item.from) will be removed. Copy leaves your synced files where they are; Move takes them out of your settings folder.")
         }
         .alert(
             "Sync Setting operation failed",
@@ -57,65 +86,94 @@ struct LinkItemListView: View {
         }
     }
 
-    private var linkItemsContent: some View {
-        HStack(spacing: 0) {
-            if sidebarVisible {
-                Group {
-                    if linkItems.isEmpty {
-                        Text("No Sync Settings")
-                            .foregroundColor(.secondary)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
-                        List(selection: $linkItemSelection) {
-                            ForEach(linkItems, id: \.self) { linkItem in
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(linkItem.name)
-                                        .fontWeight(.medium)
-                                    if !linkItem.from.isEmpty {
-                                        Text(linkItem.from)
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                            .lineLimit(1)
-                                    }
-                                }
-                                .tag(linkItem)
-                                .contextMenu {
-                                    Button("Install") { onRun(linkItem: linkItem) }
-                                    Button("Uninstall") { onUninstall(linkItem: linkItem) }
-                                    Divider()
-                                    Button("Delete", role: .destructive) { onDelete(linkItem: linkItem) }
-                                }
-                            }
-                            .onDelete(perform: deleteItems)
+    // MARK: sidebar
+
+    private var sidebar: some View {
+        Group {
+            if groups.isEmpty {
+                Text("No Sync Settings")
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(selection: $selection) {
+                    ForEach(groups) { group in
+                        HStack {
+                            Text(group.id).fontWeight(.medium)
+                            Spacer()
                         }
-                        .listStyle(.sidebar)
-                        .onAppear {
-                            if linkItemSelection == nil && !linkItems.isEmpty {
-                                linkItemSelection = linkItems.first
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 4)
+                        .foregroundColor(group.installed ? .primary : .secondary)
+                        .opacity(group.installed ? 1 : 0.45)
+                        .contentShape(Rectangle())
+                        .tag(group.id)
+                        .contextMenu {
+                            ForEach(group.items) { item in
+                                Button("Install \(item.from)") { onRun(linkItem: item) }
                             }
                         }
                     }
                 }
-                .frame(minWidth: 180, idealWidth: 200, maxWidth: 300)
-                Divider()
-            }
-
-            Group {
-                if let selectedItem = linkItemSelection {
-                    LinkItemDetailView(
-                        linkItem: selectedItem,
-                        onSave: onSave,
-                        onRun: onRun,
-                        onDelete: onDelete,
-                        onUninstall: onUninstall
-                    )
-                } else {
-                    Text("Select a Sync Setting")
-                        .foregroundColor(.secondary)
+                .listStyle(.plain)
+                .environment(\.defaultMinListHeaderHeight, 0)
+                .onAppear {
+                    if selection == nil { selection = groups.first?.id }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    /// Catalog apps and the user's own items as one list; apps that aren't installed sort last, greyed out.
+    private var groups: [AppGroup] {
+        var byName = Dictionary(grouping: linkItems, by: { RecipeInstaller.baseName($0.name) })
+        var result: [AppGroup] = []
+
+        for app in repository.response?.apps ?? [] {
+            let items = byName.removeValue(forKey: app.name) ?? []
+            let paths = app.files.map { $0.path } + items.map { $0.from }
+            result.append(AppGroup(
+                id: app.name, items: items, recipe: app,
+                installed: RecipeInstaller.isInstalled(name: app.name, paths: paths)
+            ))
+        }
+        for (name, items) in byName {
+            result.append(AppGroup(
+                id: name, items: items, recipe: nil,
+                installed: RecipeInstaller.isInstalled(name: name, paths: items.map { $0.from })
+            ))
+        }
+        return result.sorted {
+            $0.installed != $1.installed ? $0.installed : $0.id.localizedCaseInsensitiveCompare($1.id) == .orderedAscending
+        }
+    }
+
+    // MARK: locations
+
+    /// Every catalog location becomes a real sync setting, so there is one kind of
+    /// item (installed or not) rather than recipes waiting to be added.
+    private func seedFromCatalog() {
+        guard let apps = repository.response?.apps else { return }
+        var all = (try? modelContext.fetch(FetchDescriptor<LinkItem>())) ?? []
+        var added = false
+        for app in apps {
+            let have = Set(all
+                .filter { RecipeInstaller.baseName($0.name) == app.name }
+                .map { PathUtility.expandTildeToRealHome($0.from) })
+            for file in app.files where !have.contains(PathUtility.expandTildeToRealHome(file.path)) {
+                all.append(RecipeInstaller.addLocation(app: app, path: file.path, existing: all, context: modelContext))
+                added = true
+            }
+        }
+        if added { Task { await saveToYAML() } }
+    }
+
+    /// Adds a blank location to the app for the user to fill in.
+    private func addLocation(to group: AppGroup) {
+        let name = RecipeInstaller.uniqueName(base: group.id, taken: Set(linkItems.map { $0.name }))
+        let to = "\(RecipeInstaller.cleanName(group.id))-\(group.items.count + 1)"
+        modelContext.insert(LinkItem(name: name, to: to))
+        try? modelContext.save()
+        Task { await saveToYAML() }
     }
 
     private func pullFromRepository() {
@@ -165,9 +223,17 @@ struct LinkItemListView: View {
         }
     }
 
+    /// Asks what to do with the synced files before removing a link.
     private func onUninstall(linkItem: LinkItem) -> Void {
+        let path = PathUtility.expandTildeToRealHome(linkItem.from)
+        if FileOps.isSymlink(path) {
+            pendingUninstall = linkItem
+        }
+    }
+
+    private func uninstall(_ linkItem: LinkItem, mode: UninstallMode) {
         do {
-            try LinkItemInstaller.uninstall(linkItem: linkItem)
+            try LinkItemInstaller.uninstall(linkItem: linkItem, mode: mode)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -223,70 +289,12 @@ struct LinkItemListView: View {
     }
 
     private func onDelete(linkItem: LinkItem) -> Void {
-        // First uninstall the symlink
-        onUninstall(linkItem: linkItem)
-
-        // Find the index of the item to delete
-        guard let index = linkItems.firstIndex(of: linkItem) else { return }
-
-        // Determine next selection
-        let nextSelection: LinkItem? = {
-            if index < linkItems.count - 1 {
-                // Select next item if available
-                return linkItems[index + 1]
-            } else if index > 0 {
-                // Select previous item if we're deleting the last item
-                return linkItems[index - 1]
-            } else {
-                // No items left
-                return nil
-            }
-        }()
-
-        // Then delete from database
-        withAnimation {
-            modelContext.delete(linkItem)
-            linkItemSelection = nextSelection
-        }
-        // Save to YAML after deletion
-        Task {
-            await saveToYAML()
-        }
-    }
-
-    private func addItem() {
-        withAnimation {
-            // Generate a unique name
-            var baseName = Date().formatted()
-            var uniqueName = baseName
-            var counter = 1
-
-            // Check if name already exists
-            while linkItems.contains(where: { $0.name == uniqueName }) {
-                uniqueName = "\(baseName) (\(counter))"
-                counter += 1
-            }
-
-            let newItem = LinkItem(name: uniqueName)
-            modelContext.insert(newItem)
-            linkItemSelection = newItem
-        }
-        // Save to YAML after adding
-        Task {
-            await saveToYAML()
-        }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(linkItems[index])
-            }
-        }
+        uninstall(linkItem, mode: .removeLink)
+        withAnimation { modelContext.delete(linkItem) }
+        try? modelContext.save()
+        Task { await saveToYAML() }
     }
 }
-
-
 
 #Preview("LinkItemList filled") {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)

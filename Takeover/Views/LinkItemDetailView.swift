@@ -11,6 +11,8 @@ import AppKit
 
 struct LinkItemDetailView: View {
     @Bindable var linkItem: LinkItem
+    /// Shown inside an app's page: no name field, sized to its content.
+    var embedded = false
 
     private var onSave: ((LinkItem) -> Void)?
     private var onRun: ((LinkItem) -> Void)?
@@ -18,13 +20,16 @@ struct LinkItemDetailView: View {
     private var onUninstall: ((LinkItem) -> Void)?
 
     @State private var saveTask: Task<Void, Never>?
+    @State private var showCommand = false
 
     init(linkItem: LinkItem,
+         embedded: Bool = false,
          onSave: ((LinkItem) -> Void)? = nil,
          onRun: ((LinkItem) -> Void)? = nil,
          onDelete: ((LinkItem) -> Void)? = nil,
          onUninstall: ((LinkItem) -> Void)? = nil) {
         self.linkItem = linkItem
+        self.embedded = embedded
         self.onSave = onSave
         self.onRun = onRun
         self.onDelete = onDelete
@@ -33,6 +38,7 @@ struct LinkItemDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
+            if !embedded {
             // App Name Section
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -46,10 +52,14 @@ struct LinkItemDetailView: View {
 
             Divider()
 
+            }
+
             // Symlink Paths Section
             VStack(alignment: .leading, spacing: 20) {
-                Text("Sync Setting Configuration")
-                    .font(.headline)
+                if !embedded {
+                    Text("Sync Setting Configuration")
+                        .font(.headline)
+                }
 
                 // FROM Path (Source)
                 VStack(alignment: .leading, spacing: 8) {
@@ -91,6 +101,7 @@ struct LinkItemDetailView: View {
                         }
                     }
                 }
+                .card(enabled: !embedded)
 
                 // Arrow indicator
                 HStack {
@@ -140,31 +151,49 @@ struct LinkItemDetailView: View {
                         }
                     }
                 }
+                .card(enabled: !embedded)
             }
 
             Divider()
 
-            // Defaults Command Section
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Defaults Command (Optional)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                TextField("defaults write ...", text: $linkItem.defaults)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.body, design: .monospaced))
-                Text("This command will be executed when clicking Install")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
+            // Command to run after linking
+            if showCommand || !linkItem.defaults.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Run After Linking")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Button {
+                            linkItem.defaults = ""
+                            showCommand = false
+                        } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.secondary) }
+                        .buttonStyle(.plain)
+                        .help("Remove command")
+                    }
+                    TextField("defaults write ...", text: $linkItem.defaults)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.body, design: .monospaced))
+                    Text("This command runs after the link is created when you click Install")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                Button {
+                    showCommand = true
+                } label: { Label("Add Command After Linking", systemImage: "terminal") }
             }
 
-            Spacer()
+            if !embedded { Spacer() }
 
             Divider()
 
             // Action Buttons
             HStack(spacing: 12) {
-                Button("Delete", role: .destructive) {
-                    onDelete?(linkItem)
+                if !embedded {
+                    Button("Delete", role: .destructive) {
+                        onDelete?(linkItem)
+                    }
                 }
 
                 Spacer()
@@ -193,8 +222,9 @@ struct LinkItemDetailView: View {
                 }
             }
         }
-        .padding(24)
-        .frame(minWidth: 400)
+        .card(enabled: embedded, padding: 16)
+        .padding(embedded ? 0 : 24)
+        .frame(minWidth: embedded ? 0 : 400)
         .onChange(of: linkItem.name) { oldValue, newValue in
             if oldValue != newValue {
                 saveChangesToYAML()
@@ -332,3 +362,19 @@ struct LinkItemDetailView: View {
     LinkItemDetailView(linkItem: linkItem)
 }
 
+
+extension View {
+    /// Rounded, bordered box around a group of related fields.
+    @ViewBuilder
+    func card(enabled: Bool = true, padding: CGFloat = 12) -> some View {
+        if enabled {
+            self
+                .padding(padding)
+                .background(Color(nsColor: .windowBackgroundColor))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
+                .cornerRadius(8)
+        } else {
+            self
+        }
+    }
+}

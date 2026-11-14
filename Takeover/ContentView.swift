@@ -55,14 +55,6 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .toolbarBackground(.visible, for: .windowToolbar)
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Text("macOS \(SystemInfo.macOSVersionString)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-        }
         .sheet(isPresented: $showAccount) {
             AccountView(isPresented: $showAccount)
         }
@@ -81,12 +73,16 @@ struct MainTabBar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 4) {
-                ForEach(AppTab.allCases, id: \.self) { tab in
-                    tabButton(tab)
+            ZStack {
+                HStack(spacing: 4) {
+                    ForEach(AppTab.allCases, id: \.self) { tab in
+                        tabButton(tab)
+                    }
                 }
-                Spacer()
-                AccountButton(showAccount: $showAccount)
+                HStack {
+                    Spacer()
+                    AccountButton(showAccount: $showAccount)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
@@ -144,7 +140,7 @@ struct TabActionBar<Content: View>: View {
                 content
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .frame(height: 44)
 
             Divider()
         }

@@ -14,6 +14,8 @@ enum LinkInstallError: LocalizedError {
     case symlinkFailed(String)
     case removeFailed(String)
     case defaultsCommandFailed(String)
+    case restoreFailed(String)
+    case verificationFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -27,10 +29,24 @@ enum LinkInstallError: LocalizedError {
             return "Couldn't create the symlink: \(detail)"
         case let .removeFailed(detail):
             return "Couldn't remove the symlink: \(detail)"
+        case let .verificationFailed(detail):
+            return "The link was created but doesn't look right: \(detail)"
+        case let .restoreFailed(detail):
+            return "The link was removed, but restoring the files failed: \(detail)"
         case let .defaultsCommandFailed(detail):
             return "The linked defaults command failed: \(detail)"
         }
     }
+}
+
+/// What to do with the synced files when a link is removed.
+enum UninstallMode {
+    /// Put a copy back where the link was; the destination keeps its files.
+    case copyFromDestination
+    /// Move the destination's files back where the link was.
+    case moveDestination
+    /// Remove only the link, leaving nothing at the original location.
+    case removeLink
 }
 
 struct LinkItemInstaller {
@@ -74,6 +90,16 @@ struct LinkItemInstaller {
             }
         }
 
+        // The destination must exist so the link doesn't dangle: create it as a
+        // folder when there was nothing to move in and nothing there already.
+        if !FileOps.exists(backupPath) {
+            do {
+                try FileOps.makeDirectory(backupPath, allowPrivileged: true)
+            } catch {
+                throw LinkInstallError.moveToBackupFailed(error.localizedDescription)
+            }
+        }
+
         // Clear a pre-existing (stale) symlink so createSymbolicLink can succeed.
         if originalIsSymlink {
             do {
@@ -90,6 +116,8 @@ struct LinkItemInstaller {
         }
         print("Linked \(originalPath) -> \(backupPath)")
 
+        try verifyLink(originalPath: originalPath, backupPath: backupPath)
+
         if !linkItem.defaults.isEmpty {
             let result = Shell.runTrusted(linkItem.defaults)
             if !result.ok {
@@ -98,10 +126,10 @@ struct LinkItemInstaller {
         }
     }
 
-    /// Removes the symlink at the original location. A no-op if nothing is linked.
-    /// Never deletes a real file/directory.
+    /// Removes the symlink at the original location, then handles the destination
+    /// per `mode`. A no-op if nothing is linked. Never deletes a real file/directory.
     @MainActor
-    static func uninstall(linkItem: LinkItem) throws {
+    static func uninstall(linkItem: LinkItem, mode: UninstallMode = .removeLink) throws {
         guard PermissionsHelper.checkAndRequestPermissions() else {
             throw LinkInstallError.fullDiskAccessRequired
         }
@@ -111,6 +139,7 @@ struct LinkItemInstaller {
             print("Nothing to uninstall — \(originalPath) is not a symlink")
             return
         }
+        let backupPath = "\(Config.expandedBackupPath)/\(linkItem.to)"
 
         do {
             try FileOps.remove(originalPath, allowPrivileged: true)
@@ -118,9 +147,40 @@ struct LinkItemInstaller {
         } catch {
             throw LinkInstallError.removeFailed(error.localizedDescription)
         }
+
+        guard mode != .removeLink, FileOps.exists(backupPath) else { return }
+        do {
+            switch mode {
+            case .copyFromDestination:
+                try FileOps.copy(from: backupPath, to: originalPath, allowPrivileged: true)
+            case .moveDestination:
+                try FileOps.move(from: backupPath, to: originalPath, allowPrivileged: true)
+            case .removeLink:
+                break
+            }
+        } catch {
+            throw LinkInstallError.restoreFailed(error.localizedDescription)
+        }
     }
 
     // MARK: - Helpers
+
+    /// Confirms the install left a symlink at the original path that points at
+    /// an existing destination.
+    private static func verifyLink(originalPath: String, backupPath: String) throws {
+        guard FileOps.isSymlink(originalPath) else {
+            throw LinkInstallError.verificationFailed("nothing is linked at \(originalPath).")
+        }
+        guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: originalPath) else {
+            throw LinkInstallError.verificationFailed("couldn't read the link at \(originalPath).")
+        }
+        guard (target as NSString).standardizingPath == (backupPath as NSString).standardizingPath else {
+            throw LinkInstallError.verificationFailed("\(originalPath) points to \(target), not \(backupPath).")
+        }
+        guard FileOps.exists(backupPath) else {
+            throw LinkInstallError.verificationFailed("the destination \(backupPath) doesn't exist.")
+        }
+    }
 
     private static func timestamp() -> String {
         let formatter = DateFormatter()

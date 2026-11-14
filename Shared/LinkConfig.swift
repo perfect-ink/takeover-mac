@@ -5,6 +5,7 @@ struct LinkConfig: Codable {
     var from: String
     var to: String
     var defaults: String?
+    var label: String?
 }
 
 /// One macOS default the user has set. Domain/key/type are stored alongside

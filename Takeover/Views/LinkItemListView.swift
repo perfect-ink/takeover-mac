@@ -25,7 +25,9 @@ struct LinkItemListView: View {
     @State private var selection: String? = nil
     private var repository = Repository.shared
     @State private var errorMessage: String? = nil
-    @State private var pendingUninstall: LinkItem? = nil
+    @State private var pendingUninstall: [LinkItem] = []
+    /// Bumped after any link change so link status (read from disk) redraws.
+    @State private var linkRefresh = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,9 +53,10 @@ struct LinkItemListView: View {
                             onSave: onSave,
                             onRun: onRun,
                             onDelete: onDelete,
-                            onUninstall: onUninstall
+                            onUninstall: onUninstall,
+                            onUninstallAll: { onUninstallAll(items: $0) }
                         )
-                        .id(group.id)
+                        .id("\(group.id)-\(linkRefresh)")
                     } else {
                         Text("Select an app")
                             .foregroundColor(.secondary)
@@ -64,17 +67,17 @@ struct LinkItemListView: View {
         }
         .task(id: repository.response?.apps.count) { seedFromCatalog() }
         .confirmationDialog(
-            "Uninstall \(pendingUninstall?.name ?? "")?",
-            isPresented: Binding(get: { pendingUninstall != nil }, set: { if !$0 { pendingUninstall = nil } }),
+            "Uninstall \(pendingUninstall.first.map { RecipeInstaller.baseName($0.name) } ?? "")?",
+            isPresented: Binding(get: { !pendingUninstall.isEmpty }, set: { if !$0 { pendingUninstall = [] } }),
             titleVisibility: .visible,
             presenting: pendingUninstall
-        ) { item in
-            Button("Copy from destination") { uninstall(item, mode: .copyFromDestination) }
-            Button("Move destination") { uninstall(item, mode: .moveDestination) }
-            Button("Remove link, leave empty", role: .destructive) { uninstall(item, mode: .removeLink) }
+        ) { items in
+            Button("Copy from destination") { items.forEach { uninstall($0, mode: .copyFromDestination) } }
+            Button("Move destination") { items.forEach { uninstall($0, mode: .moveDestination) } }
+            Button("Remove links, leave empty", role: .destructive) { items.forEach { uninstall($0, mode: .removeLink) } }
             Button("Cancel", role: .cancel) {}
-        } message: { item in
-            Text("The link at \(item.from) will be removed. Copy leaves your synced files where they are; Move takes them out of your settings folder.")
+        } message: { items in
+            Text("The links at \(items.map { $0.from }.joined(separator: ", ")) will be removed. Copy leaves your synced files where they are; Move takes them out of your settings folder.")
         }
         .alert(
             "Sync Setting operation failed",
@@ -159,7 +162,8 @@ struct LinkItemListView: View {
             let have = Set(all
                 .filter { RecipeInstaller.baseName($0.name) == app.name }
                 .map { PathUtility.expandTildeToRealHome($0.from) })
-            for file in app.files where !have.contains(PathUtility.expandTildeToRealHome(file.path)) {
+            for file in app.files where !have.contains(PathUtility.expandTildeToRealHome(file.path))
+                && !RemovedLocations.contains(app: app.name, path: file.path) {
                 all.append(RecipeInstaller.addLocation(app: app, path: file.path, existing: all, context: modelContext))
                 added = true
             }
@@ -221,14 +225,21 @@ struct LinkItemListView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+        linkRefresh += 1
     }
 
     /// Asks what to do with the synced files before removing a link.
     private func onUninstall(linkItem: LinkItem) -> Void {
         let path = PathUtility.expandTildeToRealHome(linkItem.from)
         if FileOps.isSymlink(path) {
-            pendingUninstall = linkItem
+            pendingUninstall = [linkItem]
         }
+    }
+
+    /// Uninstall every linked location of an app after one question.
+    private func onUninstallAll(items: [LinkItem]) -> Void {
+        let linked = items.filter { FileOps.isSymlink(PathUtility.expandTildeToRealHome($0.from)) }
+        if !linked.isEmpty { pendingUninstall = linked }
     }
 
     private func uninstall(_ linkItem: LinkItem, mode: UninstallMode) {
@@ -237,6 +248,7 @@ struct LinkItemListView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+        linkRefresh += 1
     }
 
     private func onSave(linkItem: LinkItem) -> Void {
@@ -271,7 +283,8 @@ struct LinkItemListView: View {
                 name: item.name,
                 from: item.from,
                 to: item.to,
-                defaults: item.defaults.isEmpty ? nil : item.defaults
+                defaults: item.defaults.isEmpty ? nil : item.defaults,
+                label: item.label.isEmpty ? nil : item.label
             )
         }
 
@@ -289,6 +302,7 @@ struct LinkItemListView: View {
     }
 
     private func onDelete(linkItem: LinkItem) -> Void {
+        RemovedLocations.add(app: RecipeInstaller.baseName(linkItem.name), path: linkItem.from)
         uninstall(linkItem, mode: .removeLink)
         withAnimation { modelContext.delete(linkItem) }
         try? modelContext.save()
@@ -320,4 +334,24 @@ struct LinkItemListView: View {
 
     return LinkItemListView()
         .modelContainer(container)
+}
+
+/// Catalog locations the user removed, so they aren't added back on the next catalog load.
+enum RemovedLocations {
+    private static let key = "takeover.removedLocations"
+
+    private static func id(_ app: String, _ path: String) -> String {
+        "\(app)|\(PathUtility.expandTildeToRealHome(path))"
+    }
+
+    static func contains(app: String, path: String) -> Bool {
+        (UserDefaults.standard.stringArray(forKey: key) ?? []).contains(id(app, path))
+    }
+
+    static func add(app: String, path: String) {
+        var all = UserDefaults.standard.stringArray(forKey: key) ?? []
+        let entry = id(app, path)
+        if !all.contains(entry) { all.append(entry) }
+        UserDefaults.standard.set(all, forKey: key)
+    }
 }

@@ -171,7 +171,8 @@ struct TakeoverApp: App {
                     name: linkConfig.name,
                     from: expandTilde(linkConfig.from),
                     to: expandTilde(linkConfig.to),
-                    defaults: linkConfig.defaults ?? ""
+                    defaults: linkConfig.defaults ?? "",
+                    label: linkConfig.label ?? ""
                 )
                 context.insert(newItem)
             }

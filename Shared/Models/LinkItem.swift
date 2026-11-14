@@ -14,12 +14,15 @@ class LinkItem: ObservableObject, Identifiable {
     var from: String
     var to: String
     var defaults: String
+    /// Optional display name for this location within its app.
+    var label: String = ""
 
-    init(name: String, from: String = "", to: String = "", defaults: String = "") {
+    init(name: String, from: String = "", to: String = "", defaults: String = "", label: String = "") {
         self.name = name
         self.from = from
         self.to = to
         self.defaults = defaults
+        self.label = label
     }
 
     static func empty() -> LinkItem {

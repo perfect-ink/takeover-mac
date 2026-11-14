@@ -11,6 +11,17 @@ struct Config {
         PathUtility.expandTildeToRealHome(backupPath)
     }
 
+    /// Where a link's destination lives. A bare name sits inside the settings
+    /// folder; a chosen absolute (or ~) path is used as-is, never prefixed.
+    static func destinationPath(for to: String) -> String {
+        if to.hasPrefix("/") || to.hasPrefix("~") { return to }
+        return "\(backupPath)/\(to)"
+    }
+
+    static func expandedDestinationPath(for to: String) -> String {
+        PathUtility.expandTildeToRealHome(destinationPath(for: to))
+    }
+
     static var settingsPath: String {
         "\(expandedBackupPath)/takeover-settings.yaml"
     }

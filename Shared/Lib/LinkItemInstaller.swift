@@ -49,6 +49,13 @@ enum UninstallMode {
     case removeLink
 }
 
+/// How a sync setting's link looks on disk.
+enum LinkStatus {
+    case installed          // linked to this item's destination
+    case differentLocation  // a link exists but points somewhere else
+    case notInstalled
+}
+
 struct LinkItemInstaller {
 
     /// Moves the original aside into the iCloud backup location and replaces it
@@ -59,7 +66,10 @@ struct LinkItemInstaller {
             throw LinkInstallError.fullDiskAccessRequired
         }
 
-        let backupPath = "\(Config.expandedBackupPath)/\(linkItem.to)"
+        // Already linked to this destination: nothing to do.
+        if isLinked(linkItem) { return }
+
+        let backupPath = Config.expandedDestinationPath(for: linkItem.to)
         let originalPath = PathUtility.expandTildeToRealHome(linkItem.from)
 
         let originalExists = FileOps.exists(originalPath)
@@ -139,7 +149,7 @@ struct LinkItemInstaller {
             print("Nothing to uninstall — \(originalPath) is not a symlink")
             return
         }
-        let backupPath = "\(Config.expandedBackupPath)/\(linkItem.to)"
+        let backupPath = Config.expandedDestinationPath(for: linkItem.to)
 
         do {
             try FileOps.remove(originalPath, allowPrivileged: true)
@@ -165,6 +175,29 @@ struct LinkItemInstaller {
 
     // MARK: - Helpers
 
+    static func status(_ linkItem: LinkItem) -> LinkStatus {
+        if isLinked(linkItem) { return .installed }
+        guard !linkItem.from.isEmpty else { return .notInstalled }
+        let fromPath = PathUtility.expandTildeToRealHome(linkItem.from)
+        return FileOps.isSymlink(fromPath) ? .differentLocation : .notInstalled
+    }
+
+    /// True when "from" is a symlink that resolves to this item's destination,
+    /// however either path is spelled (~, symlinked parents, trailing slashes).
+    static func isLinked(_ linkItem: LinkItem) -> Bool {
+        guard !linkItem.from.isEmpty, !linkItem.to.isEmpty else { return false }
+        let fromPath = PathUtility.expandTildeToRealHome(linkItem.from)
+        guard FileOps.isSymlink(fromPath),
+              let raw = try? FileManager.default.destinationOfSymbolicLink(atPath: fromPath)
+        else { return false }
+        let target = raw.hasPrefix("/") ? raw : ((fromPath as NSString).deletingLastPathComponent as NSString).appendingPathComponent(raw)
+        return normalized(target) == normalized(Config.expandedDestinationPath(for: linkItem.to))
+    }
+
+    private static func normalized(_ path: String) -> String {
+        URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
+    }
+
     /// Confirms the install left a symlink at the original path that points at
     /// an existing destination.
     private static func verifyLink(originalPath: String, backupPath: String) throws {
@@ -174,7 +207,7 @@ struct LinkItemInstaller {
         guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: originalPath) else {
             throw LinkInstallError.verificationFailed("couldn't read the link at \(originalPath).")
         }
-        guard (target as NSString).standardizingPath == (backupPath as NSString).standardizingPath else {
+        guard normalized(target) == normalized(backupPath) else {
             throw LinkInstallError.verificationFailed("\(originalPath) points to \(target), not \(backupPath).")
         }
         guard FileOps.exists(backupPath) else {

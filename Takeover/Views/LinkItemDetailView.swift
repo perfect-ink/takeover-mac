@@ -21,6 +21,9 @@ struct LinkItemDetailView: View {
 
     @State private var saveTask: Task<Void, Never>?
     @State private var showCommand = false
+    @State private var renaming = false
+    @State private var draftLabel = ""
+    @FocusState private var renameFocused: Bool
 
     init(linkItem: LinkItem,
          embedded: Bool = false,
@@ -38,7 +41,46 @@ struct LinkItemDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            if !embedded {
+            if embedded {
+                HStack(spacing: 12) {
+                    if renaming {
+                        TextField("Name", text: $draftLabel)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($renameFocused)
+                            .onSubmit { commitRename() }
+                            .onExitCommand { renaming = false }
+                    } else {
+                        Text(linkItem.label.isEmpty ? linkItem.name : linkItem.label).font(.headline)
+                    }
+                    Spacer()
+                    statusAndButtons
+                    Menu {
+                        Button("Rename") {
+                            draftLabel = linkItem.label.isEmpty ? linkItem.name : linkItem.label
+                            renaming = true
+                            renameFocused = true
+                        }
+                        if showCommand || !linkItem.defaults.isEmpty {
+                            Button("Remove Command", role: .destructive) {
+                                linkItem.defaults = ""
+                                showCommand = false
+                            }
+                        } else {
+                            Button("Add Command") { showCommand = true }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    Button {
+                        onDelete?(linkItem)
+                    } label: { Image(systemName: "xmark") }
+                    .buttonStyle(.plain)
+                    .help("Remove this location")
+                }
+            } else {
             // App Name Section
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -99,6 +141,19 @@ struct LinkItemDetailView: View {
                                 }
                             }
                         }
+                    }
+
+                    if let target = existingLinkTarget {
+                        let matches = (target as NSString).standardizingPath
+                            == (Config.expandedDestinationPath(for: linkItem.to) as NSString).standardizingPath
+                        Label {
+                            Text("Already a link, pointing to \(target)")
+                                .textSelection(.enabled)
+                        } icon: {
+                            Image(systemName: matches ? "link" : "exclamationmark.triangle.fill")
+                        }
+                        .font(.caption)
+                        .foregroundColor(matches ? .secondary : .orange)
                     }
                 }
                 .card(enabled: !embedded)
@@ -178,47 +233,22 @@ struct LinkItemDetailView: View {
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
-            } else {
-                Button {
-                    showCommand = true
-                } label: { Label("Add Command After Linking", systemImage: "terminal") }
             }
 
-            if !embedded { Spacer() }
+            if !embedded {
+                Spacer()
 
-            Divider()
+                Divider()
 
-            // Action Buttons
-            HStack(spacing: 12) {
-                if !embedded {
+                // Action Buttons
+                HStack(spacing: 12) {
                     Button("Delete", role: .destructive) {
                         onDelete?(linkItem)
                     }
-                }
 
-                Spacer()
+                    Spacer()
 
-                if symlinkIsValid {
-                    Image(systemName: "square.and.arrow.down.badge.checkmark.fill")
-                        .foregroundColor(.green)
-                        .help("Symlink is installed and points to the correct location")
-                } else if !linkItem.from.isEmpty || !linkItem.to.isEmpty {
-                    Image(systemName: "square.and.arrow.down.badge.xmark.fill")
-                        .foregroundColor(.red)
-                        .help("Symlink is not installed")
-                }
-
-                if symlinkIsValid {
-                    Button("Uninstall") {
-                        onUninstall?(linkItem)
-                    }
-                    .disabled(!symlinkIsValid)
-                } else {
-                    Button("Install") {
-                        onRun?(linkItem)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(linkItem.from.isEmpty || linkItem.to.isEmpty || symlinkIsValid)
+                    statusAndButtons
                 }
             }
         }
@@ -263,38 +293,46 @@ struct LinkItemDetailView: View {
         }
     }
 
-    private var symlinkIsValid: Bool {
-        // Check if symlink exists at "from" path and points to generated destination
-        guard !linkItem.from.isEmpty && !linkItem.to.isEmpty else {
-            return false
-        }
-
-        let fromPath = PathUtility.expandTildeToRealHome(linkItem.from)
-        let fileManager = FileManager.default
-        var isDirectory: ObjCBool = false
-
-        // Check if the from path exists
-        guard fileManager.fileExists(atPath: fromPath, isDirectory: &isDirectory) else {
-            return false
-        }
-
-        // Check if it's a symbolic link
-        guard let attributes = try? fileManager.attributesOfItem(atPath: fromPath),
-              let fileType = attributes[.type] as? FileAttributeType,
-              fileType == .typeSymbolicLink else {
-            return false
-        }
-
-        // Check if the destination matches
-        guard let destination = try? fileManager.destinationOfSymbolicLink(atPath: fromPath) else {
-            return false
-        }
-
-        // Generate the expected destination path from iCloud + to field
-        let expectedDestination = "\(Config.expandedBackupPath)/\(linkItem.to)"
-
-        return destination == expectedDestination
+    private func commitRename() {
+        let new = draftLabel.trimmingCharacters(in: .whitespaces)
+        linkItem.label = (new == linkItem.name) ? "" : new
+        renaming = false
+        onSave?(linkItem)
     }
+
+    /// Link status icon plus the Install / Uninstall button.
+    @ViewBuilder private var statusAndButtons: some View {
+        statusIcon
+
+        // Inside an app's page the app-level Install / Uninstall covers every location.
+        if !embedded {
+            if symlinkIsValid {
+                Button("Uninstall") {
+                    onUninstall?(linkItem)
+                }
+            } else {
+                Button("Install") {
+                    onRun?(linkItem)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(linkItem.from.isEmpty || linkItem.to.isEmpty)
+            }
+        }
+    }
+
+    private var statusIcon: some View {
+        LinkStatusIcon(status: LinkItemInstaller.status(linkItem))
+    }
+
+    /// Where the existing symlink at "from" points, if there is one.
+    private var existingLinkTarget: String? {
+        guard !linkItem.from.isEmpty else { return nil }
+        let path = PathUtility.expandTildeToRealHome(linkItem.from)
+        guard FileOps.isSymlink(path) else { return nil }
+        return try? FileManager.default.destinationOfSymbolicLink(atPath: path)
+    }
+
+    private var symlinkIsValid: Bool { LinkItemInstaller.isLinked(linkItem) }
 
     private var displayToPath: String {
         guard !linkItem.to.isEmpty else {
@@ -302,7 +340,7 @@ struct LinkItemDetailView: View {
         }
 
         // Show path inside the chosen settings folder
-        return "\(Config.backupPath)/\(linkItem.to)"
+        return Config.destinationPath(for: linkItem.to)
     }
 
     func selectFile() async throws -> String? {
@@ -375,6 +413,25 @@ extension View {
                 .cornerRadius(8)
         } else {
             self
+        }
+    }
+}
+
+/// ✓ installed at the right destination, ? linked somewhere else, ✕ not installed.
+struct LinkStatusIcon: View {
+    let status: LinkStatus
+
+    var body: some View {
+        switch status {
+        case .installed:
+            Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                .help("Installed")
+        case .differentLocation:
+            Image(systemName: "questionmark.circle.fill").foregroundColor(.orange)
+                .help("Installed at a different location")
+        case .notInstalled:
+            Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
+                .help("Not installed")
         }
     }
 }

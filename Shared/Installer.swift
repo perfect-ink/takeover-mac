@@ -49,7 +49,7 @@ struct Installer {
 
     static func install(_ link: LinkConfig) -> Result<Void, InstallError> {
         let fromPath = PathUtility.expandTildeToRealHome(link.from)
-        let toPath = "\(Config.expandedBackupPath)/\(link.to)"
+        let toPath = Config.expandedDestinationPath(for: link.to)
 
         if isSymlink(atPath: fromPath) {
             return .failure(.alreadyInstalled)

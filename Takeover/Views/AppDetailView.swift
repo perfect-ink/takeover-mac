@@ -8,17 +8,43 @@ struct AppDetailView: View {
     let onRun: (LinkItem) -> Void
     let onDelete: (LinkItem) -> Void
     let onUninstall: (LinkItem) -> Void
+    let onUninstallAll: ([LinkItem]) -> Void
+
+    /// Installed only when every location is; not installed only when none is.
+    private var appStatus: LinkStatus {
+        let all = group.items.map { LinkItemInstaller.status($0) }
+        if all.allSatisfy({ $0 == .installed }) { return .installed }
+        if all.allSatisfy({ $0 == .notInstalled }) { return .notInstalled }
+        return .differentLocation
+    }
+
+    private var allLinked: Bool {
+        !group.items.isEmpty && group.items.allSatisfy { LinkItemInstaller.isLinked($0) }
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                HStack {
+                HStack(spacing: 12) {
                     Text(group.id).font(.title2).fontWeight(.semibold)
+                    Button(action: onAddLocation) {
+                        Image(systemName: "plus.circle")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Add Location")
                     Spacer()
-                    Label(group.installed ? "Installed" : "Not installed",
-                          systemImage: group.installed ? "checkmark.circle.fill" : "minus.circle")
-                        .foregroundColor(group.installed ? .green : .secondary)
-                        .font(.callout)
+                    if !group.items.isEmpty {
+                        LinkStatusIcon(status: appStatus)
+                    }
+                    if allLinked {
+                        Button("Uninstall") { onUninstallAll(group.items) }
+                    } else {
+                        Button("Install") {
+                            for item in group.items where !LinkItemInstaller.isLinked(item) { onRun(item) }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(group.items.isEmpty)
+                    }
                 }
 
                 ForEach(group.items.sorted { $0.name < $1.name }) { item in
@@ -33,11 +59,6 @@ struct AppDetailView: View {
                 }
 
 
-                Divider()
-                HStack {
-                    Button("Add Location", action: onAddLocation)
-                    Spacer()
-                }
             }
             .padding(24)
         }

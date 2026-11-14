@@ -80,6 +80,10 @@ struct MainTabBar: View {
                     }
                 }
                 HStack {
+                    Image("Logo")
+                        .resizable()
+                        .frame(width: 26, height: 26)
+                        .accessibilityLabel("Takeover")
                     Spacer()
                     AccountButton(showAccount: $showAccount)
                 }

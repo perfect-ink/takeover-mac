@@ -11,11 +11,6 @@ struct AccountView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            Image("Logo")
-                .resizable()
-                .frame(width: 64, height: 64)
-                .accessibilityHidden(true)
-
             Text(isRegister ? "Create Account" : "Sign In")
                 .font(.title2).fontWeight(.semibold)
 

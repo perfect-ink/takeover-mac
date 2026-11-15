@@ -1,7 +1,6 @@
 # App icon
 
-`logo.svg` is the source for the app icon (and, cropped to the squircle, for the
-`Logo` image asset shown in the tab bar and sign-in sheet): a blue macOS squircle with a round
+`logo.svg` is the source for the app icon: a blue macOS squircle with a round
 vault door. To regenerate the PNGs in `Takeover/Assets.xcassets/AppIcon.appiconset`:
 
 ```sh

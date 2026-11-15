@@ -123,6 +123,26 @@ class SettingsManager: ObservableObject {
         return settings
     }
 
+    /// Reads the settings files in any Takeover folder (for Restore) without
+    /// creating, migrating or changing anything there. A missing or empty
+    /// file reads as empty.
+    static func read(folder: String) throws -> SettingsYaml {
+        let directory = URL(fileURLWithPath: PathUtility.expandTildeToRealHome(folder))
+        func text(_ name: String) -> String? {
+            guard let text = try? String(contentsOf: directory.appendingPathComponent(name), encoding: .utf8),
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            return text
+        }
+        var settings = SettingsYaml(links: [])
+        if let yaml = text("takeover-settings.yaml") {
+            settings = try YAMLDecoder().decode(SettingsYaml.self, from: yaml)
+        }
+        if let yaml = text("mac-defaults.yaml") {
+            settings.macDefaults = try YAMLDecoder().decode(MacDefaultsYaml.self, from: yaml).macDefaults
+        }
+        return settings
+    }
+
     func saveSettings(_ settings: SettingsYaml) async throws {
         try writeSettingsFile(settings)
         try writeMacDefaults(settings.macDefaults ?? [])

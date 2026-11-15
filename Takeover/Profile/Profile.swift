@@ -120,19 +120,24 @@ struct Profile: Codable, Equatable {
         var source: AppSource = .brew
         var cask: String?
         var masID: String?
+        /// Installed automatically by Restore > Apply All.
+        var alwaysInstall: Bool = false
 
         var id: String { name }
 
         enum CodingKeys: String, CodingKey {
             case name, source, cask
             case masID = "mas_id"
+            case alwaysInstall = "always_install"
         }
 
-        init(name: String, source: AppSource = .brew, cask: String? = nil, masID: String? = nil) {
+        init(name: String, source: AppSource = .brew, cask: String? = nil, masID: String? = nil,
+             alwaysInstall: Bool = false) {
             self.name = name
             self.source = source
             self.cask = cask
             self.masID = masID
+            self.alwaysInstall = alwaysInstall
         }
 
         init(from decoder: Decoder) throws {
@@ -142,12 +147,15 @@ struct Profile: Codable, Equatable {
             source = AppSource(rawValue: raw) ?? .brew
             cask = try c.decodeIfPresent(String.self, forKey: .cask)
             masID = try c.decodeIfPresent(String.self, forKey: .masID)
+            alwaysInstall = try c.decodeIfPresent(Bool.self, forKey: .alwaysInstall) ?? false
         }
     }
 
-    struct AppInstallerEntry: Codable, Equatable, Hashable {
+    struct AppInstallerEntry: Codable, Equatable, Hashable, Identifiable {
         var name: String
         var path: String
+
+        var id: String { "installer|\(name)" }
     }
 }
 
@@ -169,7 +177,8 @@ extension Profile {
                 AppEntry(name: $0.name,
                          source: AppSource(rawValue: $0.source) ?? .brew,
                          cask: $0.cask.isEmpty ? nil : $0.cask,
-                         masID: $0.masID.isEmpty ? nil : $0.masID)
+                         masID: $0.masID.isEmpty ? nil : $0.masID,
+                         alwaysInstall: $0.alwaysInstall)
             }
         )
     }
@@ -206,7 +215,8 @@ extension Profile {
             apps: (settings.apps ?? []).map {
                 AppEntry(name: $0.name,
                          source: AppSource(rawValue: $0.source) ?? .brew,
-                         cask: $0.cask, masID: $0.masID)
+                         cask: $0.cask, masID: $0.masID,
+                         alwaysInstall: $0.alwaysInstall ?? false)
             },
             appInstallers: (settings.appInstallers ?? []).map {
                 AppInstallerEntry(name: $0.name, path: $0.path)
@@ -236,7 +246,8 @@ extension Profile {
             appInstallers: appInstallers.map { $0.map { AppInstallerConfig(name: $0.name, path: $0.path) } }
                 ?? local?.appInstallers,
             apps: apps.map {
-                AppEntryConfig(name: $0.name, source: $0.source.rawValue, cask: $0.cask, masID: $0.masID)
+                AppEntryConfig(name: $0.name, source: $0.source.rawValue, cask: $0.cask, masID: $0.masID,
+                               alwaysInstall: $0.alwaysInstall)
             }
         )
     }

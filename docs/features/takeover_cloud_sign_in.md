@@ -6,7 +6,7 @@ The app asks for a Takeover account only when the user picks **Takeover Cloud** 
 
 - **Settings > Storage** (`Takeover/Views/StorageSetupView.swift`, also the first-launch setup sheet): choosing Takeover Cloud shows `CloudAccountView`, with email/password, Create Account and Sign In. Once signed in it shows the account email, trial or subscription state, last sync time or error, and Sign Out. Saving the Takeover Cloud choice is disabled until signed in.
 - **iCloud Drive, Dropbox, A Folder**: no sign-in is shown or needed.
-- **Restore tab** (`Takeover/Views/RestoreView.swift`): when not signed in, it explains that Restore needs Takeover Cloud and has an **Open Settings** button (`SettingsLink`). Signed in, it lists the account's Macs as before.
+- **Restore tab**: works from any Takeover folder without an account; when signed in it also lists the account's Macs (see [restore.md](restore.md)).
 
 ## Code
 

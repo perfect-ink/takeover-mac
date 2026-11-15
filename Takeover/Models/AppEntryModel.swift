@@ -13,11 +13,16 @@ final class AppEntryModel: Identifiable {
     var cask: String
     /// App Store id, when source == "mas" (reserved; not acted on yet).
     var masID: String
+    /// Installed automatically when restoring a new Mac (Restore > Apply
+    /// All). Apps without it are listed but left for the user to pick.
+    var alwaysInstall: Bool = false
 
-    init(name: String = "", source: String = "brew", cask: String = "", masID: String = "") {
+    init(name: String = "", source: String = "brew", cask: String = "", masID: String = "",
+         alwaysInstall: Bool = false) {
         self.name = name
         self.source = source
         self.cask = cask
         self.masID = masID
+        self.alwaysInstall = alwaysInstall
     }
 }

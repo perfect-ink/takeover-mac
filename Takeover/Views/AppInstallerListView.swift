@@ -287,7 +287,8 @@ struct AppRestoreListEditor: View {
             settings.apps = entries.map {
                 AppEntryConfig(name: $0.name, source: $0.source,
                                cask: $0.cask.isEmpty ? nil : $0.cask,
-                               masID: $0.masID.isEmpty ? nil : $0.masID)
+                               masID: $0.masID.isEmpty ? nil : $0.masID,
+                               alwaysInstall: $0.alwaysInstall)
             }
             try? await SettingsManager.shared.saveSettings(settings)
         }

@@ -5,7 +5,7 @@ Where the user's settings live: iCloud Drive, Dropbox, Takeover Cloud or a folde
 ## What users see
 
 - **First open only:** a setup sheet (`StorageSetupView(isFirstLaunch: true)`) asks where to keep settings. It can't be dismissed without choosing. Settings already found on this Mac (`StorageLocation.detectExisting()`) are listed first and preselected, but the user still confirms. Picking Takeover Cloud asks for a login there (see [takeover_cloud_sign_in.md](takeover_cloud_sign_in.md)).
-- **After that:** the app never asks again. The choice can be changed in Settings (`StorageSetupView(isFirstLaunch: false)`).
+- **After that:** the app never asks again. The choice can be changed in Settings (`StorageSetupView(isFirstLaunch: false)`), or by applying a restore from another folder (see [restore.md](restore.md)).
 
 ## Code
 

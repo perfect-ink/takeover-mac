@@ -223,7 +223,8 @@ struct TakeoverApp: App {
                     name: config.name,
                     source: config.source,
                     cask: config.cask ?? "",
-                    masID: config.masID ?? ""
+                    masID: config.masID ?? "",
+                    alwaysInstall: config.alwaysInstall ?? false
                 ))
             }
         }
@@ -281,6 +282,7 @@ struct TakeoverApp: App {
                 entry.source = config.source
                 entry.cask = config.cask ?? ""
                 entry.masID = config.masID ?? ""
+                entry.alwaysInstall = config.alwaysInstall ?? false
             } else {
                 context.delete(entry)
             }

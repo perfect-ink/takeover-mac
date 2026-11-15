@@ -14,12 +14,15 @@ struct SettingsYaml: Codable {
     var appInstallers: [AppInstallerConfig]?
     /// The synced "restore list" (see AppEntryModel).
     var apps: [AppEntryConfig]?
+    /// Apps the user chose to ignore in Sync Settings, by name.
+    var ignoredSyncSettings: [String]?
 
     enum CodingKeys: String, CodingKey {
         case links
         case macDefaults = "mac_defaults"
         case appInstallers = "app_installers"
         case apps
+        case ignoredSyncSettings = "ignored_sync_settings"
     }
 
     init(links: [LinkConfig], macDefaults: [MacDefaultConfig]? = nil,
@@ -41,6 +44,7 @@ struct SettingsYaml: Codable {
         macDefaults = try container.decodeIfPresent([MacDefaultConfig].self, forKey: .macDefaults)
         appInstallers = try container.decodeIfPresent([AppInstallerConfig].self, forKey: .appInstallers)
         apps = try container.decodeIfPresent([AppEntryConfig].self, forKey: .apps)
+        ignoredSyncSettings = try container.decodeIfPresent([String].self, forKey: .ignoredSyncSettings)
     }
 }
 

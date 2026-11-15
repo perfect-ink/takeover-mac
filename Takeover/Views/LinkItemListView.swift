@@ -39,6 +39,10 @@ struct LinkItemListView: View {
     @State private var linkRefresh = 0
     /// Off by default: the sidebar lists only apps that are on this Mac.
     @AppStorage("syncSettings.showAll") private var showAll = false
+    @ObservedObject private var settingsManager = SettingsManager.shared
+
+    /// Apps hidden with Ignore. Kept in the synced settings so every Mac hides them.
+    private var ignored: Set<String> { Set(settingsManager.settings?.ignoredSyncSettings ?? []) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -58,7 +62,9 @@ struct LinkItemListView: View {
                             onRun: onRun,
                             onDelete: onDelete,
                             onUninstall: onUninstall,
-                            onUninstallAll: { onUninstallAll(items: $0) }
+                            onUninstallAll: { onUninstallAll(items: $0) },
+                            isIgnored: ignored.contains(group.id),
+                            onToggleIgnore: { toggleIgnore(group) }
                         )
                         .id("\(group.id)-\(linkRefresh)")
                     } else {
@@ -159,7 +165,7 @@ struct LinkItemListView: View {
     /// Installed (linked) first, then the rest on this Mac, then, with Show
     /// All, apps that aren't on this Mac. Empty sections are left out.
     private var sidebarSections: [SidebarSection] {
-        let visible = visibleGroups
+        let visible = visibleGroups.filter { !ignored.contains($0.id) }
         let linked = visible.filter { $0.status != .notInstalled }
         let onMac = visible.filter { $0.status == .notInstalled && $0.installed }
         let others = visible.filter { $0.status == .notInstalled && !$0.installed }
@@ -167,6 +173,7 @@ struct LinkItemListView: View {
             SidebarSection(title: "Installed", groups: linked),
             SidebarSection(title: "On This Mac", groups: onMac),
             SidebarSection(title: "Not on This Mac", groups: others),
+            SidebarSection(title: "Ignored", groups: visibleGroups.filter { ignored.contains($0.id) }),
         ].filter { !$0.groups.isEmpty }
     }
 
@@ -191,6 +198,8 @@ struct LinkItemListView: View {
             ForEach(group.items) { item in
                 Button("Install \(item.from)") { onRun(linkItem: item) }
             }
+            Divider()
+            Button(ignored.contains(group.id) ? "Stop Ignoring" : "Ignore") { toggleIgnore(group) }
         }
     }
 
@@ -200,7 +209,8 @@ struct LinkItemListView: View {
     private var visibleGroups: [AppGroup] {
         guard !showAll else { return groups }
         return groups.filter { group in
-            group.installed || group.id == selection || group.items.contains { $0.from.isEmpty }
+            !ignored.contains(group.id) &&
+            (group.installed || group.id == selection || group.items.contains { $0.from.isEmpty })
         }
     }
 
@@ -272,6 +282,16 @@ struct LinkItemListView: View {
         try? modelContext.save()
         selection = RecipeInstaller.baseName(name)
         Task { await saveToYAML() }
+    }
+
+    /// Hides an app from Sync Settings (it's listed under Ignored with Show All
+    /// on), or brings it back. Saved in the synced settings.
+    private func toggleIgnore(_ group: AppGroup) {
+        var names = ignored
+        if names.contains(group.id) { names.remove(group.id) } else { names.insert(group.id) }
+        var settings = settingsManager.settings ?? SettingsYaml(links: [])
+        settings.ignoredSyncSettings = names.isEmpty ? nil : names.sorted()
+        Task { try? await SettingsManager.shared.saveSettings(settings) }
     }
 
     /// Adds a blank location to the app for the user to fill in.

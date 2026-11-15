@@ -227,7 +227,7 @@ extension Profile {
     /// The settings file this profile describes. `keepingInstallersFrom`
     /// supplies installers when the profile predates syncing them.
     func settings(keepingInstallersFrom local: SettingsYaml?) -> SettingsYaml {
-        SettingsYaml(
+        var result = SettingsYaml(
             links: links.map {
                 LinkConfig(name: $0.name, from: $0.from, to: $0.to,
                            defaults: $0.defaults.isEmpty ? nil : $0.defaults)
@@ -250,6 +250,9 @@ extension Profile {
                                alwaysInstall: $0.alwaysInstall)
             }
         )
+        // The account profile doesn't carry the ignore list; keep this Mac's.
+        result.ignoredSyncSettings = local?.ignoredSyncSettings
+        return result
     }
 
     var isEmpty: Bool {

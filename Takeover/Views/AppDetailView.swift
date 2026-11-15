@@ -9,6 +9,8 @@ struct AppDetailView: View {
     let onDelete: (LinkItem) -> Void
     let onUninstall: (LinkItem) -> Void
     let onUninstallAll: ([LinkItem]) -> Void
+    var isIgnored = false
+    var onToggleIgnore: () -> Void = {}
 
     private var appStatus: LinkStatus { group.status }
 
@@ -27,6 +29,8 @@ struct AppDetailView: View {
                     .buttonStyle(.plain)
                     .help("Add Location")
                     Spacer()
+                    Button(isIgnored ? "Stop Ignoring" : "Ignore", action: onToggleIgnore)
+                        .help(isIgnored ? "Show this app in Sync Settings again" : "Hide this app from Sync Settings on every Mac")
                     if !group.items.isEmpty {
                         LinkStatusIcon(status: appStatus)
                     }

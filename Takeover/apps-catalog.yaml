@@ -263,9 +263,9 @@ apps:
   # so a vendor here that lists one overlaps them.
   - name: Serum (Xfer Records)
     files:
-      - name: User Audio Presets
+      - name: Root Audio Presets
         path: /Library/Audio/Presets/Xfer Records
-      - name: User Audio Presets (Users)
+      - name: User Audio Presets
         path: ~/Library/Audio/Presets/Xfer Records
       - name: User Application Support
         path: ~/Library/Application Support/Xfer
@@ -277,9 +277,9 @@ apps:
         path: ~/Library/Audio/Presets/u-he
   - name: Arturia
     files:
-      - name: User Arturia
+      - name: Root Arturia
         path: /Library/Arturia
-      - name: User Arturia (Users)
+      - name: User Arturia
         path: ~/Library/Arturia
       - name: User Arturia Application Support
         path: ~/Library/Application Support/Arturia
@@ -291,7 +291,7 @@ apps:
         path: ~/Library/Application Support/FabFilter
   - name: Valhalla DSP
     files:
-      - name: User Valhalla DSP Application Support
+      - name: Root Valhalla DSP Application Support
         path: /Library/Application Support/Valhalla DSP, LLC
   - name: iZotope
     files:

@@ -54,7 +54,7 @@ struct TakeoverApp: App {
                     async let catalog: Void = Repository.shared.load()
                     async let signIn: Void = {
                         await account.refresh()
-                        if account.isSignedIn { _ = await profileSync.registerThisMac() }
+                        if await account.isSignedIn { _ = await profileSync.registerThisMac() }
                     }()
                     await checkPermissionsOnStartup()
                     if !needsStorageSetup {

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!--
+Background agent that keeps the chosen Mac defaults applied (see
+Takeover/Sync/DefaultsAgent.swift). Copied into
+Takeover.app/Contents/Library/LaunchAgents by the "Embed Launch Agents" build
+phase and registered with SMAppService.agent(plistName:) by BackgroundAgent.
+It runs the app's own binary with --defaults-agent, so it shares the app's
+signature, Keychain access and Full Disk Access grant.
+-->
+<dict>
+	<key>Label</key>
+	<string>alexvaos.Takeover.DefaultsAgent</string>
+	<key>BundleProgram</key>
+	<string>Contents/MacOS/Takeover</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>Contents/MacOS/Takeover</string>
+		<string>--defaults-agent</string>
+	</array>
+	<key>AssociatedBundleIdentifiers</key>
+	<array>
+		<string>alexvaos.Takeover</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>LimitLoadToSessionType</key>
+	<string>Aqua</string>
+	<key>ProcessType</key>
+	<string>Background</string>
+</dict>
+</plist>

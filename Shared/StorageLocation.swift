@@ -131,6 +131,12 @@ struct StorageLocation: Codable, Equatable {
         return loaded
     }
 
+    /// Forgets the cached choice so the next `load()` reads the pointer file
+    /// again; the background agent calls this when the app changes it.
+    static func reloadFromDisk() {
+        cached = nil
+    }
+
     private static func readPointerFile() -> StorageLocation? {
         guard let data = FileManager.default.contents(atPath: pointerFilePath),
               let yaml = String(data: data, encoding: .utf8) else {

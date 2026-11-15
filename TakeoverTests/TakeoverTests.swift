@@ -67,4 +67,75 @@ struct TakeoverTests {
         #expect(!LinkItemInstaller.sourceExists("/Library/Application Support/takeover-test-\(UUID().uuidString)"))
     }
 
+    // MARK: - Keeping Mac defaults applied
+
+    private func catalogEntry(_ name: String, domain: String, key: String, type: String,
+                              postCommand: String? = nil) -> MacDefaultCatalogEntry {
+        MacDefaultCatalogEntry(name: name, domain: domain, key: key, type: type, hostFlag: nil,
+                               postCommand: postCommand, category: nil, minMacOS: nil, maxMacOS: nil)
+    }
+
+    @Test func onlyChosenDefaultsAreResolved() {
+        let catalog = [catalogEntry("Dock Autohide", domain: "com.apple.dock", key: "autohide", type: "bool",
+                                    postCommand: "killall Dock")]
+        let configs = [
+            MacDefaultConfig(name: "Dock Autohide", value: "1"),
+            MacDefaultConfig(name: "Not Picked", domain: "com.example", key: "k", type: "string", value: ""),
+            MacDefaultConfig(name: "Custom", domain: "com.example", key: "k", type: "int", value: "3"),
+            MacDefaultConfig(name: "No Domain", value: "x"),
+            MacDefaultConfig(name: "Old macOS Only", domain: "com.example", key: "old", type: "bool", value: "1"),
+        ]
+        let targets = MacDefaultTarget.resolve(configs, catalog: catalog, unsupported: ["Old macOS Only"])
+        #expect(targets.map(\.name) == ["Dock Autohide", "Custom"])
+        #expect(targets[0].writeArguments == ["write", "com.apple.dock", "autohide", "-bool", "1"])
+        #expect(targets[0].postCommand == "killall Dock")
+        #expect(targets[1].readArguments == ["read", "com.example", "k"])
+    }
+
+    @Test func catalogDescribesCatalogDefaults() {
+        let catalog = [catalogEntry("Dark Mode", domain: "NSGlobalDomain", key: "AppleInterfaceStyle", type: "string")]
+        let configs = [MacDefaultConfig(name: "Dark Mode", domain: "stale", key: "stale", type: "int", value: "Dark")]
+        let target = MacDefaultTarget.resolve(configs, catalog: catalog).first
+        #expect(target?.writeArguments == ["write", "NSGlobalDomain", "AppleInterfaceStyle", "-string", "Dark"])
+    }
+
+    @Test func hostFlagGoesFirst() {
+        let configs = [MacDefaultConfig(name: "Clock", domain: "com.apple.menuextra.clock", key: "ShowSeconds",
+                                        type: "bool", value: "1", hostFlag: "-currentHost")]
+        let target = MacDefaultTarget.resolve(configs, catalog: []).first
+        #expect(target?.readArguments == ["-currentHost", "read", "com.apple.menuextra.clock", "ShowSeconds"])
+    }
+
+    @Test func followUpCommandsRunOnce() {
+        func target(_ name: String, _ post: String) -> MacDefaultTarget {
+            MacDefaultTarget(name: name, domain: "d", key: name, type: "bool", value: "1", hostFlag: "", postCommand: post)
+        }
+        let targets = [target("a", "killall Finder"), target("b", ""), target("c", "killall Dock"), target("d", "killall Finder")]
+        #expect(MacDefaultTarget.postCommands(for: targets) == ["killall Finder", "killall Dock"])
+    }
+
+    @Test func valuesCompareByMeaning() {
+        #expect(MacDefaultValue.matches(type: "bool", desired: "true", current: "1"))
+        #expect(MacDefaultValue.matches(type: "bool", desired: "0", current: "NO"))
+        #expect(!MacDefaultValue.matches(type: "bool", desired: "1", current: "0"))
+        #expect(!MacDefaultValue.matches(type: "bool", desired: "1", current: ""))
+        #expect(MacDefaultValue.matches(type: "float", desired: "0.50", current: "0.5"))
+        #expect(MacDefaultValue.matches(type: "int", desired: "36", current: " 36\n"))
+        #expect(!MacDefaultValue.matches(type: "string", desired: "Dark", current: "Light"))
+        #expect(MacDefaultValue.matches(type: "string", desired: "Dark", current: "Dark"))
+    }
+
+    @Test func watcherMatchesSyncedFileNames() {
+        let names = ["mac-defaults.yaml"]
+        #expect(FolderWatcher.isRelevant("/x/Takeover/mac-defaults.yaml", fileNames: names))
+        #expect(FolderWatcher.isRelevant("/x/Takeover/.mac-defaults.yaml.icloud", fileNames: names))
+        #expect(!FolderWatcher.isRelevant("/x/Takeover/takeover-settings.yaml", fileNames: names))
+    }
+
+    @Test func fingerprintIsStable() {
+        let data = Data("mac_defaults: []\n".utf8)
+        #expect(MacDefaultsEnforcer.fingerprint(data) == MacDefaultsEnforcer.fingerprint(Data("mac_defaults: []\n".utf8)))
+        #expect(MacDefaultsEnforcer.fingerprint(data) != MacDefaultsEnforcer.fingerprint(Data()))
+    }
+
 }

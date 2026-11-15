@@ -86,7 +86,7 @@ close: ## Kill the running app. Only if native.
 # boots the full app and is slow/flaky for a plain `make test`.)
 test: ## Run the unit-test suite.
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration Debug \
-		-destination 'platform=macOS' -only-testing:TakeoverTests test
+		-destination 'platform=macOS' -only-testing:TakeoverTests test $(SIGN_FLAGS)
 	@echo "Tests completed successfully!"
 
 ##@ Production

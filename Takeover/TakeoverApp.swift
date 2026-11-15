@@ -9,7 +9,8 @@ import SwiftUI
 import SwiftData
 import AppKit
 
-@main
+/// Launched through TakeoverMain, which runs the background defaults agent
+/// instead when asked to.
 struct TakeoverApp: App {
     @StateObject private var settingsManager = SettingsManager.shared
     /// Asked once, on first open: until a storage choice is saved, the setup
@@ -64,6 +65,7 @@ struct TakeoverApp: App {
                         await loadFromStorage()
                     }
                     _ = await (catalog, signIn)
+                    await startKeepingDefaultsApplied()
                     // Push/pull with the account now, on activation, and
                     // every few minutes (pull only for Takeover Cloud).
                     profileSync.startAutoSync()
@@ -75,7 +77,20 @@ struct TakeoverApp: App {
                     .interactiveDismissDisabled()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .storageLocationChanged)) { _ in
-                    Task { await loadFromStorage() }
+                    Task {
+                        await loadFromStorage()
+                        SettingsDiskWatcher.shared.start()
+                        // A new Mac that just picked its settings gets their
+                        // defaults now (the agent does this itself when running).
+                        BackgroundAgent.shared.refresh()
+                        if BackgroundAgent.shared.appShouldApply {
+                            MacDefaultsEnforcer.enforceFile(trigger: .fileChanged)
+                        }
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .settingsChangedOnDisk)) { note in
+                    guard let settings = note.object as? SettingsYaml else { return }
+                    Task { await replaceDatabase(with: settings) }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .settingsPulledFromAccount)) { note in
                     guard let settings = note.object as? SettingsYaml else { return }
@@ -92,6 +107,19 @@ struct TakeoverApp: App {
 
         Settings {
             StorageSetupView(isFirstLaunch: false)
+        }
+    }
+
+    /// Registers the background agent (unless turned off), watches the
+    /// settings folder, and, when the agent isn't running, checks the chosen
+    /// Mac defaults against the system once now.
+    @MainActor
+    private func startKeepingDefaultsApplied() async {
+        BackgroundAgent.shared.registerIfNeeded()
+        guard !needsStorageSetup else { return }
+        SettingsDiskWatcher.shared.start()
+        if BackgroundAgent.shared.appShouldApply {
+            MacDefaultsEnforcer.enforceFile(trigger: .startup)
         }
     }
 

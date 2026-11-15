@@ -49,8 +49,15 @@ class SettingsManager: ObservableObject {
     @Published var settings: SettingsYaml?
     @Published var location: StorageLocation = .current
 
-    private let fileName = "takeover-settings.yaml"
-    private let macDefaultsFileName = "mac-defaults.yaml"
+    static let fileName = "takeover-settings.yaml"
+    static let macDefaultsFileName = "mac-defaults.yaml"
+    private var fileName: String { Self.fileName }
+    private var macDefaultsFileName: String { Self.macDefaultsFileName }
+
+    /// Fingerprint of both files as this process last read or wrote them, to
+    /// tell changes made elsewhere (another Mac, the background agent) from
+    /// our own saves.
+    private var knownDiskFingerprint: String?
 
     private init() {}
 
@@ -116,6 +123,7 @@ class SettingsManager: ObservableObject {
             try writeSettingsFile(settings)
         }
 
+        rememberDiskState()
         await MainActor.run {
             self.settings = settings
         }
@@ -145,7 +153,8 @@ class SettingsManager: ObservableObject {
 
     func saveSettings(_ settings: SettingsYaml) async throws {
         try writeSettingsFile(settings)
-        try writeMacDefaults(settings.macDefaults ?? [])
+        try writeMacDefaults(settings.macDefaults ?? [], madeOnThisMac: true)
+        rememberDiskState()
 
         await MainActor.run {
             self.settings = settings
@@ -160,6 +169,7 @@ class SettingsManager: ObservableObject {
     func applyFromAccount(_ settings: SettingsYaml) async throws {
         try writeSettingsFile(settings)
         try writeMacDefaults(settings.macDefaults ?? [])
+        rememberDiskState()
 
         await MainActor.run {
             self.settings = settings
@@ -176,14 +186,48 @@ class SettingsManager: ObservableObject {
     private func loadMacDefaults() throws -> [MacDefaultConfig]? {
         let url = macDefaultsFileURL
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        let yaml = String(data: try Data(contentsOf: url), encoding: .utf8) ?? ""
+        return try Self.decodeMacDefaults(try Data(contentsOf: url))
+    }
+
+    /// Contents of a `mac-defaults.yaml`; an empty file means no defaults.
+    static func decodeMacDefaults(_ data: Data) throws -> [MacDefaultConfig]? {
+        let yaml = String(data: data, encoding: .utf8) ?? ""
         if yaml.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return [] }
         return try YAMLDecoder().decode(MacDefaultsYaml.self, from: yaml).macDefaults
     }
 
-    private func writeMacDefaults(_ macDefaults: [MacDefaultConfig]) throws {
+    /// `madeOnThisMac` marks an edit from this Mac's own UI, which the
+    /// background agent doesn't apply by itself (the tab has Apply buttons);
+    /// changes from another Mac or the account are applied right away. The
+    /// mark is saved before the file so the agent never sees the file first.
+    private func writeMacDefaults(_ macDefaults: [MacDefaultConfig], madeOnThisMac: Bool = false) throws {
         let yaml = try YAMLEncoder().encode(MacDefaultsYaml(macDefaults: macDefaults))
+        let fingerprint = MacDefaultsEnforcer.fingerprint(Data(yaml.utf8))
+        if madeOnThisMac {
+            UserDefaults.standard.set(fingerprint, forKey: MacDefaultsEnforcer.localWriteKey)
+        } else if UserDefaults.standard.string(forKey: MacDefaultsEnforcer.localWriteKey) == fingerprint {
+            UserDefaults.standard.removeObject(forKey: MacDefaultsEnforcer.localWriteKey)
+        }
         try yaml.write(to: macDefaultsFileURL, atomically: true, encoding: .utf8)
+    }
+
+    // MARK: - Changes made elsewhere
+
+    private func diskFingerprint() -> String {
+        let data = [settingsFileURL, macDefaultsFileURL]
+            .map { (try? Data(contentsOf: $0)) ?? Data() }
+            .reduce(Data(), +)
+        return MacDefaultsEnforcer.fingerprint(data)
+    }
+
+    private func rememberDiskState() {
+        knownDiskFingerprint = diskFingerprint()
+    }
+
+    /// Whether either settings file differs from what this process last
+    /// read or wrote.
+    var hasChangedOnDisk: Bool {
+        diskFingerprint() != knownDiskFingerprint
     }
 
     /// When signed in, push this Mac's setup to the account (debounced). No-op

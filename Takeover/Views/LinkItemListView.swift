@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftUI
+import AppKit
 import SwiftData
 
 /// One app in the sidebar: its saved sync locations plus any catalog locations not yet added.
@@ -42,6 +43,10 @@ struct LinkItemListView: View {
     var body: some View {
         VStack(spacing: 0) {
             TabActionBar(title: "Sync Settings") {
+                Button(action: addSyncSetting) {
+                    Label("Add", systemImage: "plus")
+                }
+                .help("Add a sync setting: pick the folder or file to sync")
                 Toggle(isOn: $showAll) {
                     Label(showAll ? "Showing All" : "Show All", systemImage: showAll ? "eye" : "eye.slash")
                 }
@@ -203,6 +208,29 @@ struct LinkItemListView: View {
             }
         }
         if added { Task { await saveToYAML() } }
+    }
+
+    /// Adds a sync setting of the user's own: pick a folder or file, and it's
+    /// named after it, with To filled in. Selecting it keeps it in the list
+    /// even while only installed apps are shown.
+    private func addSyncSetting() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose the folder or file to sync"
+        panel.prompt = "Add"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        let from = PathUtility.abbreviateRealHome(url.path)
+        let taken = Set(linkItems.map { $0.name } + groups.map { $0.id })
+        let name = RecipeInstaller.uniqueName(base: url.lastPathComponent, taken: taken)
+        let to = RecipeInstaller.uniqueDestination(
+            RecipeInstaller.destination(appName: name, from: from), from: from, others: linkItems)
+        modelContext.insert(LinkItem(name: name, from: from, to: to))
+        try? modelContext.save()
+        selection = RecipeInstaller.baseName(name)
+        Task { await saveToYAML() }
     }
 
     /// Adds a blank location to the app for the user to fill in.

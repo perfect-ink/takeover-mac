@@ -203,3 +203,7 @@ apps:
   - name: iZotope
     files:
       - path: ~/Documents/iZotope
+  - name: Reason Studios
+    files:
+      - path: ~/Music/Reason Studios
+      - path: ~/Library/Application Support/Propellerhead Software

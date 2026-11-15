@@ -63,6 +63,9 @@ struct AppInstallerContentView: View {
     @State private var installedNames: [String: String] = [:]
     @State private var installError: String? = nil
     @State private var confirmUninstall: AppCard? = nil
+    /// Real icons for apps that aren't installed yet, read from their
+    /// installer or Homebrew (see `AppIconLoader`).
+    @State private var fetchedIcons: [String: NSImage] = [:]
     @State private var saveTask: Task<Void, Never>?
 
     private var cards: [AppCard] {
@@ -117,6 +120,7 @@ struct AppInstallerContentView: View {
                                 installedURL: appURL,
                                 isInstalled: isInstalled(card, installedURL: appURL),
                                 isBusy: busy.contains(card.id),
+                                fetchedIcon: fetchedIcons[card.id],
                                 alwaysInstall: restoreEntry(for: card)?.alwaysInstall ?? false,
                                 onAlwaysInstallChange: { setAlwaysInstall($0, for: card) },
                                 onInstall: { install(card) },
@@ -127,6 +131,7 @@ struct AppInstallerContentView: View {
                     }
                     .padding(16)
                 }
+                .task(id: cards.map(\.id)) { await loadIcons(for: cards) }
             }
         }
         .alert("Couldn't finish", isPresented: Binding(
@@ -163,6 +168,27 @@ struct AppInstallerContentView: View {
         if installedURL != nil { return true }
         if case .homebrew(let cask) = card.source { return installedCasks.contains(cask) }
         return false
+    }
+
+    // MARK: Icons
+
+    /// Cached icons first so they appear at once, then the slow lookups one
+    /// at a time off the main thread.
+    private func loadIcons(for cards: [AppCard]) async {
+        let pending = cards.filter { fetchedIcons[$0.id] == nil && installedURL(for: $0) == nil }
+        var slow: [AppCard] = []
+        for card in pending {
+            if let url = AppIconLoader.cachedIconURL(for: card), let image = NSImage(contentsOf: url) {
+                fetchedIcons[card.id] = image
+            } else if AppIconLoader.cacheKey(for: card) != nil {
+                slow.append(card)
+            }
+        }
+        for card in slow {
+            if Task.isCancelled { return }
+            let url = await Task.detached { await AppIconLoader.loadIconURL(for: card) }.value
+            if let url, let image = NSImage(contentsOf: url) { fetchedIcons[card.id] = image }
+        }
     }
 
     // MARK: Always install
@@ -281,6 +307,7 @@ struct AppCardView: View {
     let installedURL: URL?
     let isInstalled: Bool
     let isBusy: Bool
+    let fetchedIcon: NSImage?
     let alwaysInstall: Bool
     let onAlwaysInstallChange: (Bool) -> Void
     let onInstall: () -> Void
@@ -297,7 +324,7 @@ struct AppCardView: View {
         if case .installer(let app) = card.source, app.fileType == .app {
             return NSWorkspace.shared.icon(forFile: app.fileURL.path)
         }
-        return NSWorkspace.shared.icon(for: .applicationBundle)
+        return fetchedIcon ?? NSWorkspace.shared.icon(for: .applicationBundle)
     }
 
     var body: some View {

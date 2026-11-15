@@ -181,7 +181,7 @@ struct AppInstallerEngine {
         return (success, success ? "Installed \(appName)" : "Installation failed", appName)
     }
 
-    private static func findApp(in directory: URL) -> URL? {
+    static func findApp(in directory: URL) -> URL? {
         guard let contents = try? FileManager.default.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.isDirectoryKey],
@@ -200,7 +200,7 @@ struct AppInstallerEngine {
         return nil
     }
 
-    private static func parseMountPoint(from output: String) -> String? {
+    static func parseMountPoint(from output: String) -> String? {
         guard let data = output.data(using: .utf8),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
               let entities = plist["system-entities"] as? [[String: Any]] else {

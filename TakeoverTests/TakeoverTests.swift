@@ -48,6 +48,12 @@ struct TakeoverTests {
         #expect(AppCard.subtitle(for: .installer(pkg), installedVersion: "") == "Installed")
     }
 
+    @Test func touchIconLinksResolveAgainstThePage() {
+        let html = #"<head><link rel="icon" href="/favicon.ico"><link href='/img/touch.png' rel="apple-touch-icon" sizes="180x180"></head>"#
+        let links = AppIconLoader.touchIconLinks(in: html, base: URL(string: "https://example.com/app/")!)
+        #expect(links.map(\.absoluteString) == ["https://example.com/img/touch.png"])
+    }
+
     @Test func alwaysInstallRoundTripsAndDefaultsOff() throws {
         let off = try JSONDecoder().decode(Profile.AppEntry.self, from: Data(#"{"name":"Arc","source":"brew","cask":"arc"}"#.utf8))
         #expect(!off.alwaysInstall)

@@ -247,6 +247,21 @@ enum FileOps {
         }
     }
 
+    /// Copies `source` into `destination` with rsync, keeping whichever copy of
+    /// each file is newer and deleting nothing. Folders merge by contents.
+    static func merge(from source: String, into destination: String, allowPrivileged: Bool = false) throws {
+        let rsync = "/usr/bin/rsync"
+        let src = isDirectory(source) ? source + "/" : source
+        let dst = isDirectory(source) ? destination + "/" : destination
+        let args = ["-a", "--update", src, dst]
+        let result = Proc.run(rsync, args)
+        guard !result.ok else { return }
+        guard allowPrivileged else {
+            throw NSError(domain: "FileOps", code: 1, userInfo: [NSLocalizedDescriptionKey: "rsync failed: \(result.combined)"])
+        }
+        try PrivilegedShell.run([rsync] + args)
+    }
+
     static func remove(_ path: String, allowPrivileged: Bool = false) throws {
         guard exists(path) || isSymlink(path) else { return }
         do {

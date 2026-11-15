@@ -36,6 +36,23 @@ struct TakeoverTests {
         #expect(!RecipeInstaller.needsAppFolder(LinkItem(name: "Native Instruments (2)", from: "~/x", to: "Native Instruments/x")))
     }
 
+    @Test func mergeKeepsBothSidesFilesAndDeletesNothing() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+        let src = root + "/src", dst = root + "/dst"
+        try fm.createDirectory(atPath: src, withIntermediateDirectories: true)
+        try fm.createDirectory(atPath: dst, withIntermediateDirectories: true)
+        try "mac".write(toFile: src + "/a.txt", atomically: true, encoding: .utf8)
+        try "synced".write(toFile: dst + "/b.txt", atomically: true, encoding: .utf8)
+        defer { try? fm.removeItem(atPath: root) }
+
+        try FileOps.merge(from: src, into: dst)
+
+        #expect(try String(contentsOfFile: dst + "/a.txt", encoding: .utf8) == "mac")
+        #expect(try String(contentsOfFile: dst + "/b.txt", encoding: .utf8) == "synced")
+        #expect(fm.fileExists(atPath: src + "/a.txt"))
+    }
+
     @Test func catalogLocationNamesDecode() throws {
         let yaml = #"[{"path": "~/Documents/Native Instruments", "name": "Documents"}, "/Library/Audio/Plug-Ins"]"#
         let files = try JSONDecoder().decode([FileConfig].self, from: Data(yaml.utf8))

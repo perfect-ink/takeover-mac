@@ -38,6 +38,9 @@ struct LinkItemListView: View {
     /// Locations whose catalog name changed while files sit at the old
     /// destination: asked about before anything moves.
     @State private var pendingCatalogMoves: [CatalogMove] = []
+    /// Locations being installed whose source and synced copy both exist,
+    /// asked about one at a time.
+    @State private var pendingConflicts: [LinkItem] = []
     /// Bumped after any link change so link status (read from disk) redraws.
     @State private var linkRefresh = 0
     /// Off by default: the sidebar lists only apps that are on this Mac.
@@ -80,6 +83,19 @@ struct LinkItemListView: View {
             }
         }
         .task(id: catalogSignature) { seedFromCatalog() }
+        .confirmationDialog(
+            "\(pendingConflicts.first.map { RecipeInstaller.displayName(of: $0) } ?? "") is on this Mac and in your Takeover folder",
+            isPresented: Binding(get: { !pendingConflicts.isEmpty }, set: { if !$0 && !pendingConflicts.isEmpty { pendingConflicts.removeFirst() } }),
+            titleVisibility: .visible,
+            presenting: pendingConflicts.first
+        ) { item in
+            Button("Use This Mac's") { resolveConflict(item, .useSource) }
+            Button("Use Synced Copy") { resolveConflict(item, .useDestination) }
+            Button("Merge with rsync") { resolveConflict(item, .merge) }
+            Button("Cancel", role: .cancel) {}
+        } message: { item in
+            Text("\(item.from)\n\(Config.destinationPath(for: item.to))\n\nThe copy you don't keep is set aside with \"-old-\" and the date in its name. Merge copies this Mac's files into the synced copy, keeping the newer of each file and deleting nothing.")
+        }
         .confirmationDialog(
             "The catalog renamed \(pendingCatalogMoves.count == 1 ? "a location" : "\(pendingCatalogMoves.count) locations")",
             isPresented: Binding(get: { !pendingCatalogMoves.isEmpty }, set: { if !$0 { pendingCatalogMoves = [] } }),
@@ -442,9 +458,24 @@ struct LinkItemListView: View {
         try? modelContext.save()
     }
 
+    /// Installs a location, first asking which copy to keep when both this
+    /// Mac's files and a synced copy exist.
     private func onRun(linkItem: LinkItem) -> Void {
+        if LinkItemInstaller.hasConflict(linkItem) {
+            if !pendingConflicts.contains(where: { $0 === linkItem }) { pendingConflicts.append(linkItem) }
+            return
+        }
+        install(linkItem, conflict: .useSource)
+    }
+
+    private func resolveConflict(_ item: LinkItem, _ choice: InstallConflictChoice) {
+        install(item, conflict: choice)
+        // The dialog's dismissal drops this item from the queue.
+    }
+
+    private func install(_ linkItem: LinkItem, conflict: InstallConflictChoice) {
         do {
-            try LinkItemInstaller.install(linkItem: linkItem)
+            try LinkItemInstaller.install(linkItem: linkItem, conflict: conflict)
         } catch {
             errorMessage = error.localizedDescription
         }

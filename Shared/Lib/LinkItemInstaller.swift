@@ -49,6 +49,17 @@ enum UninstallMode {
     case removeLink
 }
 
+/// What to keep when a location's source and its synced copy both exist.
+enum InstallConflictChoice {
+    /// Keep this Mac's files; the synced copy is set aside with a timestamp.
+    case useSource
+    /// Keep the synced copy; this Mac's files are set aside with a timestamp.
+    case useDestination
+    /// rsync this Mac's files into the synced copy (newer file wins, nothing
+    /// deleted), then set this Mac's original aside.
+    case merge
+}
+
 /// How a sync setting's link looks on disk.
 enum LinkStatus {
     case installed          // linked to this item's destination
@@ -61,7 +72,7 @@ struct LinkItemInstaller {
     /// Moves the original aside into the iCloud backup location and replaces it
     /// with a symlink. Throws `LinkInstallError` on any failure.
     @MainActor
-    static func install(linkItem: LinkItem) throws {
+    static func install(linkItem: LinkItem, conflict: InstallConflictChoice = .useSource) throws {
         guard PermissionsHelper.checkAndRequestPermissions() else {
             throw LinkInstallError.fullDiskAccessRequired
         }
@@ -77,20 +88,33 @@ struct LinkItemInstaller {
         let backupExists = FileOps.exists(backupPath)
         let backupIsSymlink = FileOps.isSymlink(backupPath)
 
-        // A real original *and* a real backup already sit side by side — archive
-        // the stale backup with a timestamp rather than clobbering it.
+        // A real original *and* a real backup already sit side by side: keep the
+        // side `conflict` picks (or merge them) and set the other aside with a
+        // timestamp, never clobbering either.
+        var keepOriginal = originalExists && !originalIsSymlink
         if originalExists, !originalIsSymlink, backupExists, !backupIsSymlink {
-            let archived = "\(backupPath)-old-\(timestamp())"
             do {
-                try FileOps.move(from: backupPath, to: archived, allowPrivileged: true)
-                print("Archived existing backup to \(archived)")
+                switch conflict {
+                case .useSource:
+                    let archived = "\(backupPath)-old-\(timestamp())"
+                    try FileOps.move(from: backupPath, to: archived, allowPrivileged: true)
+                    print("Archived existing backup to \(archived)")
+                case .useDestination, .merge:
+                    if conflict == .merge {
+                        try FileOps.merge(from: originalPath, into: backupPath, allowPrivileged: true)
+                    }
+                    let archived = "\(originalPath)-old-\(timestamp())"
+                    try FileOps.move(from: originalPath, to: archived, allowPrivileged: true)
+                    print("Set this Mac's copy aside at \(archived)")
+                    keepOriginal = false
+                }
             } catch {
                 throw LinkInstallError.archiveOldBackupFailed(error.localizedDescription)
             }
         }
 
         // Move the real original into the backup location.
-        if originalExists, !originalIsSymlink {
+        if keepOriginal {
             let parent = (backupPath as NSString).deletingLastPathComponent
             do {
                 try FileOps.makeDirectory(parent, allowPrivileged: true)
@@ -201,6 +225,16 @@ struct LinkItemInstaller {
             throw LinkInstallError.symlinkFailed(error.localizedDescription)
         }
         try verifyLink(originalPath: originalPath, backupPath: newPath)
+    }
+
+    /// True when installing would find both a real source and a real synced
+    /// copy, so the user should pick which to keep (or merge).
+    static func hasConflict(_ linkItem: LinkItem) -> Bool {
+        guard !linkItem.from.isEmpty, !linkItem.to.isEmpty, !isLinked(linkItem) else { return false }
+        let original = PathUtility.expandTildeToRealHome(linkItem.from)
+        let backup = Config.expandedDestinationPath(for: linkItem.to)
+        return FileOps.exists(original) && !FileOps.isSymlink(original)
+            && FileOps.exists(backup) && !FileOps.isSymlink(backup)
     }
 
     // MARK: - Helpers

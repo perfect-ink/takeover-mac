@@ -15,9 +15,8 @@ struct AppDetailView: View {
 
     private var appStatus: LinkStatus { group.status }
 
-    private var allLinked: Bool {
-        !group.items.isEmpty && group.items.allSatisfy { LinkItemInstaller.isLinked($0) }
-    }
+    private var anyLinked: Bool { group.items.contains { LinkItemInstaller.isLinked($0) } }
+    private var anyUnlinked: Bool { group.items.contains { !LinkItemInstaller.isLinked($0) } }
 
     var body: some View {
         ScrollView {
@@ -40,11 +39,13 @@ struct AppDetailView: View {
                     if !group.items.isEmpty {
                         LinkStatusIcon(status: appStatus)
                     }
-                    if allLinked {
+                    // Both show while some locations are installed and some aren't.
+                    if anyLinked {
                         Button { onUninstallAll(group.items) } label: {
                             Label("Uninstall All", systemImage: "arrow.uturn.backward.circle")
                         }
-                    } else {
+                    }
+                    if anyUnlinked || group.items.isEmpty {
                         Button {
                             for item in group.items where !LinkItemInstaller.isLinked(item) { onRun(item) }
                         } label: {

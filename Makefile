@@ -171,3 +171,12 @@ catalog: ## Refresh the bundled offline recipe catalogs from takeoverapp.site.
 clean: ## Clean existing builds.
 	rm -rf $(BUILD_DIR)
 	@echo "Cleaned $(BUILD_DIR)"
+
+
+AGENT_RULES ?= $(HOME)/Sites/agent-rules
+
+rules: ## Sync shared agent rules from agent-rules into docs/rules/
+	@$(AGENT_RULES)/bin/agent-rules sync "$(CURDIR)"
+
+rules-check: ## Show what `make rules` would change (exit 1 if anything)
+	@$(AGENT_RULES)/bin/agent-rules check "$(CURDIR)"

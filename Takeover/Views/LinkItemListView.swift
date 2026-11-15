@@ -35,6 +35,9 @@ struct LinkItemListView: View {
     private var repository = Repository.shared
     @State private var errorMessage: String? = nil
     @State private var pendingUninstall: [LinkItem] = []
+    /// Locations whose catalog name changed while files sit at the old
+    /// destination: asked about before anything moves.
+    @State private var pendingCatalogMoves: [CatalogMove] = []
     /// Bumped after any link change so link status (read from disk) redraws.
     @State private var linkRefresh = 0
     /// Off by default: the sidebar lists only apps that are on this Mac.
@@ -76,7 +79,19 @@ struct LinkItemListView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .task(id: repository.response?.apps.count) { seedFromCatalog() }
+        .task(id: catalogSignature) { seedFromCatalog() }
+        .confirmationDialog(
+            "The catalog renamed \(pendingCatalogMoves.count == 1 ? "a location" : "\(pendingCatalogMoves.count) locations")",
+            isPresented: Binding(get: { !pendingCatalogMoves.isEmpty }, set: { if !$0 { pendingCatalogMoves = [] } }),
+            titleVisibility: .visible,
+            presenting: pendingCatalogMoves
+        ) { moves in
+            Button("Rename and Move") { applyCatalogMoves(moves) }
+            Button("Keep Current Names", role: .cancel) { moves.forEach { CatalogSeen.record($0.item, $0.to) } }
+        } message: { moves in
+            Text(moves.map { "\($0.item.to) → \($0.to)" }.joined(separator: "\n")
+                 + "\n\nRename and Move moves each folder in your Takeover folder and relinks it.")
+        }
         .confirmationDialog(
             "Uninstall \(pendingUninstall.first.map { RecipeInstaller.baseName($0.name) } ?? "")?",
             isPresented: Binding(get: { !pendingUninstall.isEmpty }, set: { if !$0 { pendingUninstall = [] } }),
@@ -265,7 +280,69 @@ struct LinkItemListView: View {
             }
         }
         if moveIntoAppFolders(all, apps: apps) { added = true }
+        if followCatalogNames(all, apps: apps) { added = true }
         if added { Task { await saveToYAML() } }
+    }
+
+    /// Changes whenever any catalog app, path or name does, so a catalog update
+    /// that only renames a location is noticed.
+    private var catalogSignature: String {
+        (repository.response?.apps ?? [])
+            .map { app in app.name + "|" + app.files.map { "\($0.path)=\($0.name ?? "")" }.joined(separator: ",") }
+            .joined(separator: ";")
+    }
+
+    /// When the catalog gives a location (same source) a new name or
+    /// destination: a location with nothing on disk just follows it; one with
+    /// files at its destination or a link is asked about first. A change already
+    /// answered (or matched) on this Mac isn't asked again, so renaming a
+    /// location yourself sticks.
+    private func followCatalogNames(_ all: [LinkItem], apps: [AppConfig]) -> Bool {
+        var changed = false
+        var ask: [CatalogMove] = []
+        for item in all where !item.from.isEmpty && !item.to.isEmpty && !RecipeInstaller.isAbsolute(item.to) {
+            guard catalogFile(for: item, apps: apps) != nil else { continue }
+            let to = defaultDestination(for: item, apps: apps, others: all.filter { $0 !== item })
+            if to == item.to { CatalogSeen.record(item, to); continue }
+            if CatalogSeen.seen(item) == to { continue }
+            if LinkItemInstaller.status(item) == .notInstalled
+                && !FileOps.exists(Config.expandedDestinationPath(for: item.to)) {
+                item.to = to
+                item.label = ""
+                CatalogSeen.record(item, to)
+                changed = true
+            } else {
+                ask.append(CatalogMove(item: item, to: to))
+            }
+        }
+        if changed { try? modelContext.save() }
+        if !ask.isEmpty { pendingCatalogMoves = ask }
+        return changed
+    }
+
+    /// Moves each location's folder to its new catalog destination and relinks it.
+    private func applyCatalogMoves(_ moves: [CatalogMove]) {
+        var failures: [String] = []
+        for move in moves {
+            do {
+                try LinkItemInstaller.moveDestination(of: move.item, to: move.to)
+                move.item.to = move.to
+                move.item.label = ""
+                CatalogSeen.record(move.item, move.to)
+            } catch {
+                failures.append("\(move.item.to): \(error.localizedDescription)")
+            }
+        }
+        try? modelContext.save()
+        Task { await saveToYAML() }
+        linkRefresh += 1
+        if !failures.isEmpty { errorMessage = failures.joined(separator: "\n") }
+    }
+
+    private func catalogFile(for item: LinkItem, apps: [AppConfig]) -> FileConfig? {
+        let from = PathUtility.expandTildeToRealHome(item.from)
+        return apps.first { $0.name == RecipeInstaller.baseName(item.name) }?
+            .files.first { PathUtility.expandTildeToRealHome($0.path) == from }
     }
 
     /// Gives locations from before app folders an "App/Location" To. Only ones
@@ -463,6 +540,7 @@ struct LinkItemListView: View {
                 try LinkItemInstaller.moveDestination(of: item, to: to)
                 item.to = to
                 item.label = ""
+                CatalogSeen.record(item, to)
             } catch {
                 failures.append("\(RecipeInstaller.displayName(of: item)): \(error.localizedDescription)")
             }
@@ -477,9 +555,7 @@ struct LinkItemListView: View {
     /// Takeover/App/Location for a location: the catalog's name for its path,
     /// else its rename label, else its source's name.
     private func defaultDestination(for item: LinkItem, apps: [AppConfig], others: [LinkItem]) -> String {
-        let from = PathUtility.expandTildeToRealHome(item.from)
-        let catalogName = apps.first { $0.name == RecipeInstaller.baseName(item.name) }?
-            .files.first { PathUtility.expandTildeToRealHome($0.path) == from }?.name
+        let catalogName = catalogFile(for: item, apps: apps)?.name
         let name = catalogName ?? (item.label.isEmpty ? nil : item.label)
         return item.from.isEmpty
             ? RecipeInstaller.uniqueDestination(appName: item.name, location: name ?? "Location", from: "", others: others)
@@ -522,6 +598,34 @@ struct LinkItemListView: View {
 }
 
 /// Catalog locations the user removed, so they aren't added back on the next catalog load.
+/// A location to move to the destination the catalog now gives it.
+struct CatalogMove: Identifiable {
+    let item: LinkItem
+    let to: String
+    var id: String { "\(item.from)|\(to)" }
+}
+
+/// The catalog destination each location (app + source) last had on this Mac,
+/// so a catalog rename is asked about once, not on every launch.
+enum CatalogSeen {
+    private static let key = "takeover.catalogDestinations"
+
+    private static func id(_ item: LinkItem) -> String {
+        "\(RecipeInstaller.baseName(item.name))|\(PathUtility.expandTildeToRealHome(item.from))"
+    }
+
+    static func seen(_ item: LinkItem) -> String? {
+        (UserDefaults.standard.dictionary(forKey: key) as? [String: String])?[id(item)]
+    }
+
+    static func record(_ item: LinkItem, _ to: String) {
+        var all = (UserDefaults.standard.dictionary(forKey: key) as? [String: String]) ?? [:]
+        guard all[id(item)] != to else { return }
+        all[id(item)] = to
+        UserDefaults.standard.set(all, forKey: key)
+    }
+}
+
 enum RemovedLocations {
     private static let key = "takeover.removedLocations"
 

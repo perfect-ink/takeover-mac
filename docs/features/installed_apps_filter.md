@@ -1,6 +1,6 @@
 # Installed apps filter
 
-The Sync Settings sidebar (`Takeover/Views/LinkItemListView.swift`) lists only apps that are on this Mac by default. A **Show All** toggle in the tab's action bar also shows the rest, greyed out and sorted last as before. The choice is remembered (`@AppStorage("syncSettings.showAll")`).
+The Sync Settings sidebar (`Takeover/Views/LinkItemListView.swift`) lists only apps that are on this Mac by default. A **Show All** toggle at the top of the sidebar, next to Refresh, also shows the rest, greyed out and sorted last as before. The choice is remembered (`@AppStorage("syncSettings.showAll")`).
 
 - "On this Mac" is `AppGroup.installed`, from `RecipeInstaller.isInstalled`: an app bundle with the app's name in /Applications (or ~/Applications, Utilities, System), or any of its locations' source paths existing.
 - While filtering, an app also stays listed when it's selected or has a location with no From yet, so one you're setting up doesn't disappear.

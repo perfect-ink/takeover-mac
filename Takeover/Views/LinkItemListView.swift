@@ -47,17 +47,6 @@ struct LinkItemListView: View {
                     Label("Add", systemImage: "plus")
                 }
                 .help("Add a sync setting: pick the folder or file to sync")
-                Toggle(isOn: $showAll) {
-                    Label(showAll ? "Showing All" : "Show All", systemImage: showAll ? "eye" : "eye.slash")
-                }
-                .toggleStyle(.button)
-                .help(showAll ? "Hide apps that aren't on this Mac" : "Also show apps that aren't on this Mac (\(hiddenCount) hidden)")
-                if repository.isLoading { ProgressView().scaleEffect(0.6) }
-                Button {
-                    Task { await repository.load(force: true) }
-                } label: { Label("Refresh", systemImage: "arrow.clockwise") }
-                .help("Fetch the latest app recipes")
-                .disabled(repository.isLoading)
             }
 
             HStack(spacing: 0) {
@@ -111,7 +100,37 @@ struct LinkItemListView: View {
 
     // MARK: sidebar
 
+    /// Show All and Refresh sit above the list they change.
+    private var sidebarControls: some View {
+        HStack(spacing: 8) {
+            Toggle(isOn: $showAll) {
+                Label("Show All", systemImage: showAll ? "eye" : "eye.slash")
+            }
+            .toggleStyle(.button)
+            .controlSize(.small)
+            .help(showAll ? "Hide apps that aren't on this Mac" : "Also show apps that aren't on this Mac (\(hiddenCount) hidden)")
+            Spacer()
+            if repository.isLoading { ProgressView().scaleEffect(0.5) }
+            Button {
+                Task { await repository.load(force: true) }
+            } label: { Image(systemName: "arrow.clockwise") }
+            .buttonStyle(.borderless)
+            .help("Refresh: fetch the latest app recipes")
+            .disabled(repository.isLoading)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+    }
+
     private var sidebar: some View {
+        VStack(spacing: 0) {
+            sidebarControls
+            Divider()
+            sidebarList
+        }
+    }
+
+    private var sidebarList: some View {
         Group {
             if visibleGroups.isEmpty {
                 VStack(spacing: 8) {

@@ -4,11 +4,10 @@ Any app in the Sync Settings sidebar can be ignored: right-click it and choose *
 
 - An ignored app leaves the sidebar's groups. With Show All on it's listed under **Ignored** at the bottom, where **Stop Ignoring** (same two places) brings it back.
 - Ignoring only hides the app; its locations, links and synced files are left as they are.
-- The list of ignored app names is saved in the settings file as `ignored_sync_settings` (`SettingsYaml.ignoredSyncSettings`), so other Macs using the same settings folder (iCloud, Dropbox, a folder) hide them too.
+- The list of ignored app names is saved in the settings file as `ignored_sync_settings` (`SettingsYaml.ignoredSyncSettings`), so other Macs using the same settings folder (iCloud, Dropbox, a folder) hide them too. Takeover Cloud carries it in the Mac's profile (`Profile.ignoredSyncSettings`, JSON key `ignored_sync_settings`; the server stores profiles as-is). A profile from an older build without the key keeps this Mac's list.
 
 ## Known limits
 
-- Takeover Cloud profiles don't carry the list yet; applying a profile from the account keeps this Mac's own list (`Profile.settings(keepingInstallersFrom:)`).
 - Restore's Apply All doesn't look at it.
 - Not compiled or run locally (Linux session); the GitHub Actions build compiles it.
 

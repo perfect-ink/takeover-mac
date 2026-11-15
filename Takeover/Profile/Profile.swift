@@ -16,6 +16,9 @@ struct Profile: Codable, Equatable {
     /// Nil in profiles pushed by builds that didn't sync installers; applying
     /// such a profile keeps this Mac's installers as they are.
     var appInstallers: [AppInstallerEntry]?
+    /// Apps ignored in Sync Settings. Nil in profiles from builds before it
+    /// synced; applying one of those keeps this Mac's list.
+    var ignoredSyncSettings: [String]?
 
     enum CodingKeys: String, CodingKey {
         case version
@@ -23,6 +26,7 @@ struct Profile: Codable, Equatable {
         case links
         case apps
         case appInstallers = "app_installers"
+        case ignoredSyncSettings = "ignored_sync_settings"
     }
 
     init(version: Int = 1, macDefaults: [MacDefaultEntry] = [], links: [LinkEntry] = [],
@@ -41,6 +45,7 @@ struct Profile: Codable, Equatable {
         links = (try? c.decodeIfPresent([LinkEntry].self, forKey: .links)) ?? []
         apps = (try? c.decodeIfPresent([AppEntry].self, forKey: .apps)) ?? []
         appInstallers = try? c.decodeIfPresent([AppInstallerEntry].self, forKey: .appInstallers)
+        ignoredSyncSettings = try? c.decodeIfPresent([String].self, forKey: .ignoredSyncSettings)
     }
 
     struct MacDefaultEntry: Codable, Equatable, Identifiable, Hashable {
@@ -222,6 +227,7 @@ extension Profile {
                 AppInstallerEntry(name: $0.name, path: $0.path)
             }
         )
+        ignoredSyncSettings = settings.ignoredSyncSettings ?? []
     }
 
     /// The settings file this profile describes. `keepingInstallersFrom`
@@ -250,8 +256,9 @@ extension Profile {
                                alwaysInstall: $0.alwaysInstall)
             }
         )
-        // The account profile doesn't carry the ignore list; keep this Mac's.
-        result.ignoredSyncSettings = local?.ignoredSyncSettings
+        // Profiles from older builds don't carry the ignore list; keep this Mac's.
+        let ignored = ignoredSyncSettings ?? local?.ignoredSyncSettings ?? []
+        result.ignoredSyncSettings = ignored.isEmpty ? nil : ignored
         return result
     }
 

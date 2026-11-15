@@ -11,3 +11,4 @@ One file per feature; see docs/rules/feature-docs.md.
 - [installed_apps_filter.md](installed_apps_filter.md): Sync Settings shows only apps on this Mac, with a Show All toggle.
 - [keep_mac_defaults_applied.md](keep_mac_defaults_applied.md): chosen Mac defaults are applied at login and whenever the synced file changes.
 - [add_sync_setting.md](add_sync_setting.md): the Add button in Sync Settings, for a setting of your own.
+- [one_password_prompt.md](one_password_prompt.md): privileged steps share one password prompt.

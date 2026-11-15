@@ -7,7 +7,7 @@
 //
 //    • Proc            – run a known tool with an argv array (no shell, no quoting)
 //    • Shell           – run a TRUSTED command line via /bin/sh (catalog/settings text only)
-//    • PrivilegedShell – run one argv command with administrator privileges (one auth prompt)
+//    • PrivilegedShell – run one argv command with administrator privileges (in-process, so one prompt covers several steps)
 //    • FileOps         – FileManager wrappers that transparently escalate on EPERM
 //
 
@@ -145,42 +145,48 @@ enum Shell {
 
 // MARK: - PrivilegedShell
 
-/// Runs a single command, as its own argv, with administrator privileges. The
-/// arguments are handed to AppleScript via `on run argv` and shell-quoted with
-/// `quoted form of`, so there is no shell- or AppleScript-injection surface even
-/// when a path contains quotes, spaces or `$(…)`.
+/// Runs a single command, as its own argv, with administrator privileges.
+///
+/// The script runs in this process through NSAppleScript, not a new
+/// `osascript` each time: macOS then remembers the authorization for about five
+/// minutes, so an install that needs several privileged steps (move, then
+/// link) asks for the password once instead of once per step.
+///
+/// Each argument is single-quoted for the shell and the whole command escaped
+/// as an AppleScript string, so a path with quotes, spaces or `$(…)` can't
+/// break out of either.
 enum PrivilegedShell {
-    private static let runner = """
-    on run argv
-        set cmd to ""
-        repeat with a in argv
-            set cmd to cmd & quoted form of (a as text) & " "
-        end repeat
-        do shell script cmd with administrator privileges
-    end run
-    """
-
     @discardableResult
     static func run(_ argv: [String]) throws -> String {
         precondition(!argv.isEmpty, "PrivilegedShell.run requires at least the tool path")
+        let command = argv.map(shellQuoted).joined(separator: " ")
+        let source = "do shell script \(appleScriptString(command)) with administrator privileges"
 
-        let scriptURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("takeover-\(UUID().uuidString).applescript")
-        do {
-            try runner.write(to: scriptURL, atomically: true, encoding: .utf8)
-        } catch {
-            throw SystemOpError.launchFailed(tool: "osascript", underlying: error)
+        let execute = { () -> Result<String, Error> in
+            guard let script = NSAppleScript(source: source) else {
+                return .failure(SystemOpError.privilegedFailed(argv: argv, status: -1, message: "Couldn't build the AppleScript"))
+            }
+            var errorInfo: NSDictionary?
+            let output = script.executeAndReturnError(&errorInfo)
+            if let errorInfo {
+                let number = (errorInfo[NSAppleScript.errorNumber] as? NSNumber)?.int32Value ?? -1
+                let message = errorInfo[NSAppleScript.errorMessage] as? String ?? ""
+                return .failure(SystemOpError.privilegedFailed(argv: argv, status: number, message: "\(message) (\(number))"))
+            }
+            return .success(output.stringValue ?? "")
         }
-        defer { try? FileManager.default.removeItem(at: scriptURL) }
 
-        let result = Proc.run("/usr/bin/osascript", [scriptURL.path] + argv)
-        guard result.ok else {
-            throw SystemOpError.privilegedFailed(
-                argv: argv, status: result.exitCode,
-                message: result.stderr.isEmpty ? result.stdout : result.stderr
-            )
-        }
-        return result.stdout
+        // NSAppleScript isn't thread-safe; run it on the main thread.
+        if Thread.isMainThread { return try execute().get() }
+        return try DispatchQueue.main.sync(execute: execute).get()
+    }
+
+    static func shellQuoted(_ arg: String) -> String {
+        "'" + arg.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    static func appleScriptString(_ text: String) -> String {
+        "\"" + text.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
     }
 }
 

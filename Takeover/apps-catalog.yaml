@@ -1,7 +1,16 @@
 # Takeover app catalog: the app configs the Mac app's Apps tab can add as
 # Sync Settings. Served as a static file at https://takeoverapp.site/catalog/apps.yaml
-# (and readable straight from GitHub). db/seeds.rb loads the same file into
-# the DB behind GET /api/v1/repository, so edit here and re-seed.
+# (and readable straight from GitHub). GET /api/v1/repository reads this file
+# directly (app/models/catalog.rb), so editing it is all a change needs.
+#
+# Each path is moved into the sync folder and replaced by a symlink, so list
+# only folders and files that work as symlinks: user config, presets and
+# libraries. Leave out ~/Library/Preferences plists (cfprefsd replaces
+# symlinked plists), sandboxed ~/Library/Containers paths, caches, browser
+# profiles, files that mostly hold credentials, and license or activation
+# data (moving it can deactivate a plug-in). When a vendor keeps its apps' settings under one company folder
+# (Native Instruments, Ableton, Image-Line, JetBrains), sync the whole company
+# folder rather than one app's subfolder.
 #
 # `os_recipies` keeps the old api/repository.json spelling; the Mac app
 # decodes that key.
@@ -37,3 +46,171 @@ apps:
   - name: Native Instruments
     files:
       - path: /Library/Application Support/Native Instruments
+
+  # Shells and command-line tools
+  - name: Git
+    files:
+      - path: ~/.gitconfig
+  - name: Zsh
+    files:
+      - path: ~/.zshrc
+      - path: ~/.zprofile
+  - name: Oh My Zsh
+    files:
+      - path: ~/.oh-my-zsh/custom
+  - name: Bash
+    files:
+      - path: ~/.bash_profile
+      - path: ~/.bashrc
+  - name: Fish
+    files:
+      - path: ~/.config/fish
+  - name: Starship
+    files:
+      - path: ~/.config/starship.toml
+  - name: Tmux
+    files:
+      - path: ~/.tmux.conf
+  - name: GitHub CLI
+    files:
+      - path: ~/.config/gh/config.yml
+  - name: GnuPG
+    files:
+      - path: ~/.gnupg/gpg.conf
+      - path: ~/.gnupg/gpg-agent.conf
+
+  # Editors and developer tools
+  - name: Vim
+    files:
+      - path: ~/.vimrc
+      - path: ~/.vim
+  - name: Neovim
+    files:
+      - path: ~/.config/nvim
+  - name: Visual Studio Code
+    files:
+      - path: ~/Library/Application Support/Code/User/settings.json
+      - path: ~/Library/Application Support/Code/User/keybindings.json
+      - path: ~/Library/Application Support/Code/User/snippets
+  - name: Cursor
+    files:
+      - path: ~/Library/Application Support/Cursor/User/settings.json
+      - path: ~/Library/Application Support/Cursor/User/keybindings.json
+      - path: ~/Library/Application Support/Cursor/User/snippets
+  - name: Zed
+    files:
+      - path: ~/.config/zed/settings.json
+      - path: ~/.config/zed/keymap.json
+  - name: Sublime Text
+    files:
+      - path: ~/Library/Application Support/Sublime Text/Packages/User
+  - name: BBEdit
+    files:
+      - path: ~/Library/Application Support/BBEdit
+  - name: Xcode
+    files:
+      - path: ~/Library/Developer/Xcode/UserData/CodeSnippets
+      - path: ~/Library/Developer/Xcode/UserData/FontAndColorThemes
+      - path: ~/Library/Developer/Xcode/UserData/KeyBindings
+  - name: Fork
+    files:
+      - path: ~/Library/Application Support/com.DanPristupov.Fork/custom-commands.json
+  - name: DBeaver
+    files:
+      - path: ~/Library/DBeaverData
+  - name: JetBrains
+    files:
+      - path: ~/Library/Application Support/JetBrains
+  - name: Insomnia
+    files:
+      - path: ~/Library/Application Support/Insomnia
+
+  # Terminals
+  - name: iTerm2
+    files:
+      - path: ~/Library/Application Support/iTerm2/DynamicProfiles
+  - name: Ghostty
+    files:
+      - path: ~/.config/ghostty
+      - path: ~/Library/Application Support/com.mitchellh.ghostty
+  - name: Alacritty
+    files:
+      - path: ~/.config/alacritty
+  - name: kitty
+    files:
+      - path: ~/.config/kitty
+  - name: WezTerm
+    files:
+      - path: ~/.wezterm.lua
+  - name: Warp
+    files:
+      - path: ~/.warp
+  - name: Hyper
+    files:
+      - path: ~/.hyper.js
+
+  # Keyboard and automation
+  - name: Karabiner-Elements
+    files:
+      - path: ~/.config/karabiner
+  - name: Hammerspoon
+    files:
+      - path: ~/.hammerspoon
+  - name: Keyboard Maestro
+    files:
+      - path: ~/Library/Application Support/Keyboard Maestro
+
+  # Music and audio
+  - name: Audio Presets
+    files:
+      - path: /Library/Audio/Presets
+  - name: Audio Presets (Users)
+    files:
+      - path: ~/Library/Audio/Presets
+  - name: Ableton Live
+    files:
+      - path: ~/Music/Ableton
+  - name: Logic Pro
+    files:
+      - path: ~/Music/Audio Music Apps
+  - name: REAPER
+    files:
+      - path: ~/Library/Application Support/REAPER
+  - name: Bitwig Studio
+    files:
+      - path: ~/Documents/Bitwig Studio
+  - name: FL Studio
+    files:
+      - path: ~/Documents/Image-Line
+
+  # Design and 3D
+  - name: Sketch
+    files:
+      - path: ~/Library/Application Support/com.bohemiancoding.sketch3/Plugins
+  - name: Blender
+    files:
+      - path: ~/Library/Application Support/Blender
+
+  # Audio plug-in vendors. Each syncs the vendor's own folder; the Audio
+  # Presets entries above already hold every vendor's Audio/Presets folder,
+  # so a vendor here that lists one overlaps them.
+  - name: Serum (Xfer Records)
+    files:
+      - path: /Library/Audio/Presets/Xfer Records
+  - name: u-he
+    files:
+      - path: ~/Library/Application Support/u-he
+      - path: ~/Library/Audio/Presets/u-he
+  - name: Arturia
+    files:
+      - path: /Library/Arturia
+  - name: FabFilter
+    files:
+      - path: ~/Documents/FabFilter
+      - path: ~/Library/Application Support/FabFilter
+  - name: Valhalla DSP
+    files:
+      - path: /Library/Application Support/Valhalla DSP, LLC
+  - name: iZotope
+    files:
+      - path: ~/Documents/iZotope

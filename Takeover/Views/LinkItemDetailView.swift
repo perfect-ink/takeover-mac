@@ -219,8 +219,6 @@ struct LinkItemDetailView: View {
                 .card(enabled: !embedded)
             }
 
-            Divider()
-
             // Command to run after linking
             if showCommand || !linkItem.defaults.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {

@@ -101,6 +101,17 @@ class Repository {
         return order.compactMap { merged[$0] }
     }
 
+    /// The fetched catalog plus any app only the bundled copy has, so a server
+    /// that's behind the app's build never hides recipes the build ships with.
+    static func addingBundled(to apps: [AppConfig]) -> [AppConfig] {
+        guard let url = Bundle.main.url(forResource: "apps-catalog", withExtension: "yaml"),
+              let data = try? Data(contentsOf: url),
+              let bundled = try? RemoteCatalog.decode(RepositoryResponse.self, from: data)
+        else { return apps }
+        let names = Set(apps.map { $0.name })
+        return apps + bundled.apps.filter { !names.contains($0.name) }
+    }
+
     func load(force: Bool = false) async {
         isLoading = true
         error = nil
@@ -110,7 +121,8 @@ class Repository {
             let loaded = try await RemoteCatalog.load(
                 RepositoryResponse.self, sources: sources, cacheName: "apps-catalog",
                 bundled: Bundle.main.url(forResource: "apps-catalog", withExtension: "yaml"), force: force)
-            response = RepositoryResponse(version: loaded.version, os_recipies: loaded.os_recipies, apps: Self.mergingVariants(loaded.apps))
+            let apps = Self.addingBundled(to: loaded.apps)
+            response = RepositoryResponse(version: loaded.version, os_recipies: loaded.os_recipies, apps: Self.mergingVariants(apps))
         } catch let fetchError {
             error = fetchError
         }

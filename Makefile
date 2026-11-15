@@ -169,8 +169,10 @@ catalog: ## Refresh the bundled offline recipe catalogs from takeoverapp.site.
 	@mkdir -p $(BUILD_DIR)
 	@for pair in mac-defaults:mac-defaults-catalog apps:apps-catalog; do \
 		src=$${pair%%:*}; dst="$(APP)/$${pair##*:}.yaml"; tmp="$(BUILD_DIR)/download-$$src.yaml"; \
-		if curl -fsSL "$(CATALOG_URL)/$$src.yaml" -o "$$tmp"; then mv "$$tmp" "$$dst"; echo "Updated $$dst"; \
-		else echo "warning: couldn't fetch $$src.yaml; keeping the bundled copy"; fi; \
+		if ! curl -fsSL "$(CATALOG_URL)/$$src.yaml" -o "$$tmp"; then echo "warning: couldn't fetch $$src.yaml; keeping the bundled copy"; \
+		elif [ "$$(grep -c '^ *- name:' "$$tmp")" -lt "$$(grep -c '^ *- name:' "$$dst")" ]; then \
+			echo "warning: the site's $$src.yaml has fewer recipes than the bundled copy (not deployed yet?); keeping the bundled copy"; \
+		else mv "$$tmp" "$$dst"; echo "Updated $$dst"; fi; \
 	done
 
 clean: ## Clean existing builds.

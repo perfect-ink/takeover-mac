@@ -175,6 +175,14 @@ struct LinkItemInstaller {
 
     // MARK: - Helpers
 
+    /// Whether a sync location's source is on this Mac, as a real file or
+    /// folder or as a link. An empty path counts as present (nothing to warn about).
+    static func sourceExists(_ path: String) -> Bool {
+        guard !path.isEmpty else { return true }
+        let expanded = PathUtility.expandTildeToRealHome(path)
+        return FileOps.exists(expanded) || FileOps.isSymlink(expanded)
+    }
+
     static func status(_ linkItem: LinkItem) -> LinkStatus {
         if isLinked(linkItem) { return .installed }
         guard !linkItem.from.isEmpty else { return .notInstalled }

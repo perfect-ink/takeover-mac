@@ -34,3 +34,6 @@ apps:
   - name: Audio Plug-Ins (Users)
     files:
       - path: ~/Library/Audio/Plug-Ins
+  - name: Native Instruments
+    files:
+      - path: /Library/Application Support/Native Instruments

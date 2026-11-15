@@ -155,6 +155,12 @@ struct LinkItemDetailView: View {
                         .font(.caption)
                         .foregroundColor(matches ? .secondary : .orange)
                     }
+
+                    if let warning = missingSourceWarning {
+                        Label(warning, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
                 }
                 .card(enabled: !embedded)
 
@@ -322,6 +328,16 @@ struct LinkItemDetailView: View {
 
     private var statusIcon: some View {
         LinkStatusIcon(status: LinkItemInstaller.status(linkItem))
+    }
+
+    /// Shown when the source isn't on this Mac, so installing doesn't quietly
+    /// link an empty folder.
+    private var missingSourceWarning: String? {
+        guard !LinkItemInstaller.sourceExists(linkItem.from) else { return nil }
+        if !linkItem.to.isEmpty, FileOps.exists(Config.expandedDestinationPath(for: linkItem.to)) {
+            return "This path doesn't exist on this Mac. Installing links it to your synced copy."
+        }
+        return "This path doesn't exist on this Mac, so there's nothing to sync yet. Installing links an empty folder here."
     }
 
     /// Where the existing symlink at "from" points, if there is one.

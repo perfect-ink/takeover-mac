@@ -214,6 +214,12 @@ struct AppRecipeRow: View {
                             Text(app.files[index].path)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
+                            if !LinkItemInstaller.sourceExists(app.files[index].path) {
+                                Label("Not found on this Mac", systemImage: "exclamationmark.triangle.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.orange)
+                                    .help("This path doesn't exist here, so there's nothing to sync from it yet.")
+                            }
                         }
                         .padding(.leading, 8)
                     }

@@ -338,8 +338,20 @@ struct LinkItemDetailView: View {
     @ViewBuilder private var statusAndButtons: some View {
         statusIcon
 
-        // Inside an app's page the app-level Install / Uninstall covers every location.
-        if !embedded {
+        // Inside an app's page each location has its own icon button; the
+        // app's Install All / Uninstall covers every location.
+        if embedded {
+            if symlinkIsValid {
+                Button { onUninstall?(linkItem) } label: { Image(systemName: "arrow.uturn.backward.circle") }
+                    .buttonStyle(.plain)
+                    .help("Uninstall this location")
+            } else {
+                Button { onRun?(linkItem) } label: { Image(systemName: "arrow.down.circle") }
+                    .buttonStyle(.plain)
+                    .help("Install this location")
+                    .disabled(linkItem.from.isEmpty || linkItem.to.isEmpty)
+            }
+        } else {
             if symlinkIsValid {
                 Button("Uninstall") {
                     onUninstall?(linkItem)

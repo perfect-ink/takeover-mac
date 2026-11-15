@@ -8,9 +8,11 @@ Every sync location's destination is `[settings folder]/[app name]/[location nam
 - **Rename** (location's ••• menu, `LinkItemDetailView.commitRename`) renames the destination folder too, through `LinkItemInstaller.moveDestination(of:to:)`: it moves the folder if there is one (refusing to replace an existing folder) and relinks the source when it's linked. A To outside the settings folder only gets a label.
 - **Older locations.** On load, locations still in the old flat layout (`NativeInstruments-Documents`) move to `App/Location` when they aren't linked and nothing is at their old destination (`LinkItemListView.moveIntoAppFolders`).
 - **Reset Locations.** The ↺ button next to an app's name gives each of its locations the destination it would get today (catalog name, else rename label, else source name), moving the synced files there and relinking linked ones with `moveDestination`, so nothing is lost. It also brings back the app's catalog locations that were removed (`RemovedLocations.forget`). While any location is still in the old layout, a folder button in the sidebar controls does the same for every location (without bringing removed ones back). Failures are listed in one alert; the rest still move.
+- **Installing.** An app's page has **Install All** (links every location that isn't linked yet; **Uninstall** once all are). Each location also has its own icon button next to its status: ↓ installs just that location, ↩ uninstalls it (asking what to do with its files first) (`LinkItemDetailView.statusAndButtons`).
 - Tests: `destinationIsAppFolderThenLocationFolder`, `clashingLocationsGetTheDifferingPart`, `locationNameMatchesItsDestinationFolder`, `catalogLocationNamesDecode`, `distinguishingPartIsWhereThePathsDiffer` in `TakeoverTests/TakeoverTests.swift`; takeover-site's `catalog_test.rb` checks every path has a name, unique within its app.
 - Limits: other Macs linked to a renamed location's old folder see it as linked elsewhere until they reinstall it.
 
 ## History
 
+- 2026-11-15: per-location Install / Uninstall icon buttons; the app's Install is now Install All.
 - Implemented 2026-11-15. Not compiled locally (Linux session, no Swift toolchain); the GitHub Actions build on main compiles it and runs `make test`. Not yet in a release.

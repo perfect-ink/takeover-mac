@@ -43,7 +43,7 @@ struct AppDetailView: View {
                     if allLinked {
                         Button("Uninstall") { onUninstallAll(group.items) }
                     } else {
-                        Button("Install") {
+                        Button("Install All") {
                             for item in group.items where !LinkItemInstaller.isLinked(item) { onRun(item) }
                         }
                         .buttonStyle(.borderedProminent)

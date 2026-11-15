@@ -10,7 +10,6 @@ struct RestoreView: View {
     @Query(sort: \MacDefault.name) private var currentDefaults: [MacDefault]
     @Query(sort: \AppEntryModel.name) private var currentApps: [AppEntryModel]
 
-    @State private var showAccount = false
     @State private var isSavingState = false
     @State private var saveStateMessage: String?
     @State private var selectedComputerID: Int?
@@ -46,7 +45,6 @@ struct RestoreView: View {
                     } label: { Label("Refresh", systemImage: "arrow.clockwise") }
                     .disabled(sync.isLoadingComputers)
                 }
-                AccountButton(showAccount: $showAccount)
             }
 
             if !account.isSignedIn {
@@ -61,9 +59,6 @@ struct RestoreView: View {
                 }
             }
         }
-        .sheet(isPresented: $showAccount) {
-            AccountView(isPresented: $showAccount).environmentObject(account)
-        }
         .task(id: account.isSignedIn) {
             if account.isSignedIn { await sync.loadComputers() }
         }
@@ -74,11 +69,11 @@ struct RestoreView: View {
     private var signedOut: some View {
         VStack(spacing: 12) {
             Image(systemName: "arrow.clockwise.icloud").font(.system(size: 40)).foregroundStyle(.secondary)
-            Text("Sign in to restore").font(.headline)
-            Text("Sync this Mac's setup to your account, then pick a Mac to restore from.")
+            Text("Restore needs Takeover Cloud").font(.headline)
+            Text("Choose Takeover Cloud as your storage in Settings and sign in there. Then pick a Mac to restore from.")
                 .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 .frame(maxWidth: 320)
-            Button("Sign In") { showAccount = true }.buttonStyle(.borderedProminent)
+            SettingsLink { Text("Open Settings") }.buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -320,40 +315,5 @@ struct RestoreView: View {
 private extension Set {
     mutating func toggle(_ element: Element, on: Bool) {
         if on { insert(element) } else { remove(element) }
-    }
-}
-
-/// Shared account chip used in each tab's action bar.
-struct AccountButton: View {
-    @EnvironmentObject var account: AccountManager
-    @Binding var showAccount: Bool
-    @State private var usesCloud = StorageLocation.current.provider == .takeoverCloud
-
-    var body: some View {
-        Group {
-            content
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .storageLocationChanged)) { _ in
-            usesCloud = StorageLocation.current.provider == .takeoverCloud
-        }
-    }
-
-    @ViewBuilder private var content: some View {
-        if !usesCloud {
-            EmptyView()
-        } else if let user = account.currentUser {
-            Menu {
-                Text(user.email)
-                Button("Sign Out") { account.signOut() }
-            } label: {
-                Label(user.username, systemImage: "person.crop.circle.fill")
-            }
-        } else {
-            Button {
-                showAccount = true
-            } label: {
-                Label("Sign In", systemImage: "person.crop.circle")
-            }
-        }
     }
 }

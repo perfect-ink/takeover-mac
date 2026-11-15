@@ -35,11 +35,10 @@ enum AppTab: String, CaseIterable {
 
 struct ContentView: View {
     @AppStorage("takeover.activeTab") private var activeTab: AppTab = .links
-    @State private var showAccount = false
 
     var body: some View {
         VStack(spacing: 0) {
-            MainTabBar(activeTab: $activeTab, showAccount: $showAccount)
+            MainTabBar(activeTab: $activeTab)
 
             Group {
                 switch activeTab {
@@ -55,9 +54,6 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .sheet(isPresented: $showAccount) {
-            AccountView(isPresented: $showAccount)
-        }
     }
 }
 
@@ -69,19 +65,12 @@ struct ContentView: View {
 /// each tab's `.toolbar` content.
 struct MainTabBar: View {
     @Binding var activeTab: AppTab
-    @Binding var showAccount: Bool
 
     var body: some View {
         VStack(spacing: 0) {
-            ZStack {
-                HStack(spacing: 4) {
-                    ForEach(AppTab.allCases, id: \.self) { tab in
-                        tabButton(tab)
-                    }
-                }
-                HStack {
-                    Spacer()
-                    AccountButton(showAccount: $showAccount)
+            HStack(spacing: 4) {
+                ForEach(AppTab.allCases, id: \.self) { tab in
+                    tabButton(tab)
                 }
             }
             .padding(.horizontal, 16)

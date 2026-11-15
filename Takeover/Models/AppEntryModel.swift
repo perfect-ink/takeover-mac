@@ -25,4 +25,27 @@ final class AppEntryModel: Identifiable {
         self.masID = masID
         self.alwaysInstall = alwaysInstall
     }
+
+    var config: AppEntryConfig {
+        AppEntryConfig(name: name, source: source,
+                       cask: cask.isEmpty ? nil : cask,
+                       masID: masID.isEmpty ? nil : masID,
+                       alwaysInstall: alwaysInstall)
+    }
+}
+
+extension AppEntryModel {
+    /// Saves the restore list locally and writes it to the synced settings
+    /// (`apps:`), which carries each app's Always install flag.
+    @MainActor
+    static func saveRestoreList(in context: ModelContext) {
+        try? context.save()
+        let entries = (try? context.fetch(FetchDescriptor<AppEntryModel>(sortBy: [SortDescriptor(\.name)]))) ?? []
+        let configs = entries.map(\.config)
+        Task { @MainActor in
+            guard var settings = SettingsManager.shared.settings else { return }
+            settings.apps = configs
+            try? await SettingsManager.shared.saveSettings(settings)
+        }
+    }
 }

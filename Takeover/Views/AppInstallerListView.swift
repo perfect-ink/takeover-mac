@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct AppInstallerListView: View {
     @Environment(\.modelContext) private var modelContext
@@ -42,72 +43,93 @@ struct AppInstallerListView: View {
     }
 }
 
+/// The Applications tab's Self Service style catalog: a grid of app cards.
+/// An app that isn't installed shows Install; an installed one shows Open and
+/// Uninstall. Cards come from the installers folder and from Homebrew apps on
+/// the restore list below (see `AppCard`).
 struct AppInstallerContentView: View {
     @Bindable var installer: AppInstaller
     var onSave: (() -> Void)?
 
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \AppEntryModel.name) private var restoreEntries: [AppEntryModel]
+
     @State private var discoveredApps: [DiscoveredApp] = []
+    @State private var installedCasks: Set<String> = []
     @State private var isScanning = false
-    @State private var installStatus: [String: String] = [:]
-    @State private var installing: Set<String> = []
+    @State private var busy: Set<String> = []
+    /// Bundle names learned from an install, when the .app inside a zip or DMG
+    /// is named differently from the installer file.
     @State private var installedNames: [String: String] = [:]
     @State private var installError: String? = nil
+    @State private var confirmUninstall: AppCard? = nil
     @State private var saveTask: Task<Void, Never>?
+
+    private var cards: [AppCard] {
+        AppCard.cards(installers: discoveredApps, restoreList: restoreEntries.map {
+            Profile.AppEntry(name: $0.name, source: Profile.AppSource(rawValue: $0.source) ?? .brew,
+                             cask: $0.cask.isEmpty ? nil : $0.cask)
+        })
+    }
+
+    private let columns = [GridItem(.adaptive(minimum: 220, maximum: 320), spacing: 16)]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             TabActionBar(title: "Applications") {
-                TextField("~/Downloads/Apps", text: $installer.path)
+                TextField("Installers folder, e.g. ~/Downloads/Apps", text: $installer.path)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
                     .frame(width: 260)
+                    .onSubmit { refresh() }
                 Button("Browse") { browseForFolder() }
-                Button("Scan") { scanApps() }
-                    .disabled(installer.path.isEmpty)
-                if isScanning { ProgressView().scaleEffect(0.7) }
+                Button {
+                    refresh()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .help("Scan the folder again")
+                .disabled(isScanning)
+                if isScanning { ProgressView().controlSize(.small) }
             }
 
-            if discoveredApps.isEmpty && !isScanning {
-                Text(installer.path.isEmpty ? "Set a folder path and tap Scan" : "No apps found — tap Scan")
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if cards.isEmpty && !isScanning {
+                VStack(spacing: 8) {
+                    Image(systemName: "square.grid.2x2")
+                        .font(.system(size: 32))
+                        .foregroundStyle(.secondary)
+                    Text(installer.path.isEmpty
+                         ? "Pick a folder of installers (.dmg, .zip, .pkg or .app) with Browse, or add Homebrew apps to the restore list below."
+                         : "No installers found in that folder.")
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 360)
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(discoveredApps) { app in
-                    let resolved = installedNames[app.id]
-                    AppRowView(
-                        app: app,
-                        status: installStatus[app.id],
-                        isInstalling: installing.contains(app.id),
-                        isInstalled: app.isInstalled(resolvedName: resolved),
-                        onInstall: { installApp(app) },
-                        onUninstall: { uninstallApp(app) },
-                        onOpen: {
-                            let name = resolved ?? app.name
-                            NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications/\(name).app"))
-                        }
-                    )
-                    .contextMenu {
-                        Button("Install") { installApp(app) }
-                            .disabled(app.isInstalled(resolvedName: resolved) || installing.contains(app.id))
-                        Button("Uninstall", role: .destructive) { uninstallApp(app) }
-                            .disabled(!app.isInstalled(resolvedName: resolved))
-                        Button("Reveal in Finder") {
-                            NSWorkspace.shared.activateFileViewerSelecting([app.fileURL])
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 16) {
+                        ForEach(cards) { card in
+                            let appURL = installedURL(for: card)
+                            AppCardView(
+                                card: card,
+                                installedURL: appURL,
+                                isInstalled: isInstalled(card, installedURL: appURL),
+                                isBusy: busy.contains(card.id),
+                                alwaysInstall: restoreEntry(for: card)?.alwaysInstall ?? false,
+                                onAlwaysInstallChange: { setAlwaysInstall($0, for: card) },
+                                onInstall: { install(card) },
+                                onOpen: { if let url = appURL { NSWorkspace.shared.open(url) } },
+                                onUninstall: { confirmUninstall = card }
+                            )
                         }
                     }
+                    .padding(16)
                 }
             }
-
-            Divider()
-
-            HStack {
-                Spacer()
-                Button("Install All") { installAll() }
-                    .disabled(discoveredApps.filter { !$0.isInstalled(resolvedName: installedNames[$0.id]) }.isEmpty)
-            }
-            .padding(16)
         }
-        .alert("Installation Error", isPresented: Binding(
+        .alert("Couldn't finish", isPresented: Binding(
             get: { installError != nil },
             set: { if !$0 { installError = nil } }
         )) {
@@ -115,9 +137,64 @@ struct AppInstallerContentView: View {
         } message: {
             Text(installError ?? "")
         }
+        .confirmationDialog(
+            "Uninstall \(confirmUninstall?.name ?? "")?",
+            isPresented: Binding(
+                get: { confirmUninstall != nil },
+                set: { if !$0 { confirmUninstall = nil } }
+            ),
+            presenting: confirmUninstall
+        ) { card in
+            Button("Uninstall", role: .destructive) { uninstall(card) }
+        } message: { _ in
+            Text("The app is removed from this Mac. Its settings stay where they are.")
+        }
         .onChange(of: installer.path) { _, _ in scheduleSave() }
-        .onAppear { if !installer.path.isEmpty { scanApps() } }
+        .onAppear { refresh() }
     }
+
+    // MARK: Install state
+
+    private func installedURL(for card: AppCard) -> URL? {
+        InstalledApps.url(named: installedNames[card.id] ?? card.name)
+    }
+
+    private func isInstalled(_ card: AppCard, installedURL: URL?) -> Bool {
+        if installedURL != nil { return true }
+        if case .homebrew(let cask) = card.source { return installedCasks.contains(cask) }
+        return false
+    }
+
+    // MARK: Always install
+
+    /// The restore-list entry behind a card: same cask for Homebrew cards,
+    /// otherwise same name (ignoring case).
+    private func restoreEntry(for card: AppCard) -> AppEntryModel? {
+        if case .homebrew(let cask) = card.source,
+           let match = restoreEntries.first(where: { $0.source == "brew" && $0.cask == cask }) {
+            return match
+        }
+        return restoreEntries.first { $0.name.caseInsensitiveCompare(card.name) == .orderedSame }
+    }
+
+    /// Marks an app to be installed automatically on restore or a new Mac.
+    /// An installer-folder app not on the restore list yet is added to it as
+    /// a local installer, so the flag has somewhere to live in the synced settings.
+    private func setAlwaysInstall(_ on: Bool, for card: AppCard) {
+        if let entry = restoreEntry(for: card) {
+            entry.alwaysInstall = on
+        } else if on {
+            switch card.source {
+            case .installer:
+                modelContext.insert(AppEntryModel(name: card.name, source: "local", alwaysInstall: true))
+            case .homebrew(let cask):
+                modelContext.insert(AppEntryModel(name: card.name, source: "brew", cask: cask, alwaysInstall: true))
+            }
+        }
+        AppEntryModel.saveRestoreList(in: modelContext)
+    }
+
+    // MARK: Actions
 
     private func browseForFolder() {
         let panel = NSOpenPanel()
@@ -127,61 +204,65 @@ struct AppInstallerContentView: View {
         if panel.runModal() == .OK, let url = panel.url {
             installer.path = url.path
             scheduleSave()
-            scanApps()
+            refresh()
         }
     }
 
-    private func scanApps() {
-        guard !installer.path.isEmpty else { return }
+    /// Rescans the installers folder and asks Homebrew what it has installed.
+    private func refresh() {
+        let path = installer.path
         isScanning = true
         Task {
-            let apps = AppInstallerEngine.scan(at: installer.path)
-            await MainActor.run {
-                discoveredApps = apps
-                isScanning = false
-            }
+            let result = await Task.detached { () -> ([DiscoveredApp], Set<String>) in
+                (path.isEmpty ? [] : AppInstallerEngine.scan(at: path), AppRestoreEngine.installedCasks())
+            }.value
+            discoveredApps = result.0
+            installedCasks = result.1
+            isScanning = false
         }
     }
 
-    private func installApp(_ app: DiscoveredApp) {
-        installing.insert(app.id)
+    private func install(_ card: AppCard) {
+        busy.insert(card.id)
         Task {
-            let result = AppInstallerEngine.install(app)
-            await MainActor.run {
-                installing.remove(app.id)
-                if result.success {
-                    installStatus[app.id] = result.message
-                } else {
-                    installError = result.message
+            switch card.source {
+            case .installer(let app):
+                let result = await Task.detached { AppInstallerEngine.install(app) }.value
+                if let name = result.installedName { installedNames[card.id] = name }
+                if !result.success { installError = result.message }
+            case .homebrew(let cask):
+                let entry = Profile.AppEntry(name: card.name, source: .brew, cask: cask)
+                let outcome = await Task.detached { AppRestoreEngine.install(entry, localFolder: nil) }.value
+                if outcome == .needsHomebrew {
+                    installError = "\(card.name) installs with Homebrew, which isn't on this Mac yet. Install Homebrew from the Restore tab, then try again."
+                } else if !outcome.ok {
+                    installError = outcome.label
                 }
-                if let name = result.installedName {
-                    installedNames[app.id] = name
-                }
-                discoveredApps = AppInstallerEngine.scan(at: installer.path)
             }
+            busy.remove(card.id)
+            refresh()
         }
     }
 
-    private func uninstallApp(_ app: DiscoveredApp) {
-        installing.insert(app.id)
+    private func uninstall(_ card: AppCard) {
+        busy.insert(card.id)
         Task {
-            let result = AppInstallerEngine.uninstall(app, installedName: installedNames[app.id])
-            await MainActor.run {
-                installing.remove(app.id)
-                if result.success {
-                    installStatus[app.id] = result.message
-                    installedNames.removeValue(forKey: app.id)
-                } else {
-                    installError = result.message
-                }
-                discoveredApps = AppInstallerEngine.scan(at: installer.path)
+            let result: (success: Bool, message: String)
+            switch card.source {
+            case .installer(let app):
+                let name = installedNames[card.id]
+                result = await Task.detached { AppInstallerEngine.uninstall(app, installedName: name) }.value
+            case .homebrew(let cask):
+                result = await Task.detached { AppRestoreEngine.uninstallCask(cask) }.value
             }
+            if result.success {
+                installedNames.removeValue(forKey: card.id)
+            } else {
+                installError = result.message
+            }
+            busy.remove(card.id)
+            refresh()
         }
-    }
-
-    private func installAll() {
-        let pending = discoveredApps.filter { !$0.isInstalled(resolvedName: installedNames[$0.id]) }
-        for app in pending { installApp(app) }
     }
 
     private func scheduleSave() {
@@ -193,50 +274,105 @@ struct AppInstallerContentView: View {
     }
 }
 
-struct AppRowView: View {
-    let app: DiscoveredApp
-    let status: String?
-    let isInstalling: Bool
+/// One app card: icon, name, a short line, and Install or Open and Uninstall.
+/// The card itself isn't clickable, so it has no hover state; its buttons do.
+struct AppCardView: View {
+    let card: AppCard
+    let installedURL: URL?
     let isInstalled: Bool
+    let isBusy: Bool
+    let alwaysInstall: Bool
+    let onAlwaysInstallChange: (Bool) -> Void
     let onInstall: () -> Void
-    let onUninstall: () -> Void
     let onOpen: () -> Void
+    let onUninstall: () -> Void
+
+    private var subtitle: String {
+        AppCard.subtitle(for: card.source,
+                         installedVersion: isInstalled ? installedURL.map(InstalledApps.version(at:)) ?? "" : nil)
+    }
+
+    private var icon: NSImage {
+        if let url = installedURL { return NSWorkspace.shared.icon(forFile: url.path) }
+        if case .installer(let app) = card.source, app.fileType == .app {
+            return NSWorkspace.shared.icon(forFile: app.fileURL.path)
+        }
+        return NSWorkspace.shared.icon(for: .applicationBundle)
+    }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: app.fileType.systemImage)
-                .foregroundColor(.secondary)
-                .frame(width: 20)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(app.name)
-                Text(app.fileType.label)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(nsImage: icon)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 56, height: 56)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(card.name)
+                        .font(.headline)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
             }
 
-            Spacer()
+            HStack(spacing: 8) {
+                if isBusy {
+                    ProgressView().controlSize(.small)
+                    Text(isInstalled ? "Working…" : "Installing…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if isInstalled {
+                    if installedURL != nil {
+                        Button("Open", action: onOpen)
+                            .buttonStyle(.borderedProminent)
+                    }
+                    Button("Uninstall", role: .destructive, action: onUninstall)
+                        .buttonStyle(.bordered)
+                } else {
+                    Button("Install", action: onInstall)
+                        .buttonStyle(.borderedProminent)
+                }
+                Spacer(minLength: 0)
+            }
+            .controlSize(.regular)
+            .frame(height: 28)
 
-            if isInstalling {
-                ProgressView()
-                    .scaleEffect(0.7)
-                    .frame(width: 60)
-            } else if status != nil {
-                Button("Open", action: onOpen)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-            } else if isInstalled {
-                Button("Uninstall", action: onUninstall)
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .foregroundColor(.red)
-            } else {
-                Button("Install", action: onInstall)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+            Toggle("Always install", isOn: Binding(get: { alwaysInstall }, set: onAlwaysInstallChange))
+                .toggleStyle(.checkbox)
+                .font(.caption)
+                .help("Install \(card.name) automatically on restore or a new Mac. Apps left unchecked are only installed when you click Install.")
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Color(nsColor: .separatorColor))
+        )
+        .contextMenu {
+            if case .installer(let app) = card.source {
+                Button("Reveal Installer in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([app.fileURL])
+                }
+            }
+            if let url = installedURL {
+                Button("Show App in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                }
             }
         }
-        .padding(.vertical, 2)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(card.name)
     }
 }
 
@@ -281,17 +417,7 @@ struct AppRestoreListEditor: View {
     }
 
     private func persist() {
-        try? modelContext.save()
-        Task { @MainActor in
-            guard var settings = SettingsManager.shared.settings else { return }
-            settings.apps = entries.map {
-                AppEntryConfig(name: $0.name, source: $0.source,
-                               cask: $0.cask.isEmpty ? nil : $0.cask,
-                               masID: $0.masID.isEmpty ? nil : $0.masID,
-                               alwaysInstall: $0.alwaysInstall)
-            }
-            try? await SettingsManager.shared.saveSettings(settings)
-        }
+        AppEntryModel.saveRestoreList(in: modelContext)
     }
 }
 
@@ -326,6 +452,10 @@ private struct RestoreListRow: View {
             }
 
             Spacer()
+            Toggle("Always install", isOn: $entry.alwaysInstall)
+                .toggleStyle(.checkbox)
+                .help("Install this app automatically on restore or a new Mac")
+                .onChange(of: entry.alwaysInstall) { _, _ in onChange() }
             Button(role: .destructive, action: onDelete) {
                 Image(systemName: "trash")
             }.buttonStyle(.plain).foregroundStyle(.secondary)

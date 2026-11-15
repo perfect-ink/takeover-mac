@@ -20,9 +20,19 @@ enum AppFileType {
         case .pkg: return "PKG"
         }
     }
+
+    /// Finishes "Installs from …" on an app card.
+    var sourceDescription: String {
+        switch self {
+        case .zip: return "a ZIP archive"
+        case .dmg: return "a disk image"
+        case .app: return "an app copy"
+        case .pkg: return "an installer package"
+        }
+    }
 }
 
-struct DiscoveredApp: Identifiable {
+struct DiscoveredApp: Identifiable, Equatable {
     var id: String { fileURL.path }
     var name: String
     var fileURL: URL

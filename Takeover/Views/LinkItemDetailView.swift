@@ -11,6 +11,8 @@ import AppKit
 
 struct LinkItemDetailView: View {
     @Bindable var linkItem: LinkItem
+    /// Every location, so a new To name can avoid one that's already used.
+    @Query private var allLinkItems: [LinkItem]
     /// Shown inside an app's page: no name field, sized to its content.
     var embedded = false
 
@@ -338,7 +340,9 @@ struct LinkItemDetailView: View {
     /// destination never moves.
     private func updateToForPickedSource() {
         guard !linkItem.to.hasPrefix("/"), !linkItem.to.hasPrefix("~") else { return }
-        linkItem.to = RecipeInstaller.destination(appName: linkItem.name, from: linkItem.from)
+        let base = RecipeInstaller.destination(appName: linkItem.name, from: linkItem.from)
+        let others = allLinkItems.filter { $0.persistentModelID != linkItem.persistentModelID }
+        linkItem.to = RecipeInstaller.uniqueDestination(base, from: linkItem.from, others: others)
     }
 
     /// Shown when the source isn't on this Mac, so installing doesn't quietly

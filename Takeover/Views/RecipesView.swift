@@ -151,13 +151,44 @@ enum RecipeInstaller {
         return app.isEmpty ? folder : "\(app)-\(folder)"
     }
 
+    /// The part of `path` that tells it apart from `other`: drop the path
+    /// components both end with and take the last one left, so
+    /// "~/Library/Audio/Plug-Ins" vs "/Library/Audio/Plug-Ins" gives "User" and
+    /// the other way round gives "System".
+    static func distinguishingPart(of path: String, from other: String) -> String {
+        func parts(_ p: String) -> [String] {
+            (PathUtility.abbreviateRealHome(p) as NSString).pathComponents
+                .filter { $0 != "/" }
+                .map { $0 == "~" ? "User" : $0 }
+        }
+        var mine = parts(path), theirs = parts(other)
+        while let a = mine.last, let b = theirs.last, a.caseInsensitiveCompare(b) == .orderedSame {
+            mine.removeLast(); theirs.removeLast()
+        }
+        return cleanName(mine.last ?? "System")
+    }
+
+    /// `base`, or when another location already uses that To, `base` plus the
+    /// part of the path that differs from that location's ("Kontakt-User-Presets").
+    static func uniqueDestination(_ base: String, from path: String, others: [LinkItem]) -> String {
+        let taken = Set(others.map { $0.to.lowercased() })
+        guard taken.contains(base.lowercased()),
+              let clash = others.first(where: { $0.to.caseInsensitiveCompare(base) == .orderedSame })
+        else { return base }
+        let candidate = "\(base)-\(distinguishingPart(of: path, from: clash.from))"
+        guard taken.contains(candidate.lowercased()) else { return candidate }
+        var n = 2
+        while taken.contains("\(candidate)-\(n)".lowercased()) { n += 1 }
+        return "\(candidate)-\(n)"
+    }
+
     @discardableResult
     static func addLocation(app: AppConfig, path: String, existing: [LinkItem], context: ModelContext) -> LinkItem {
         let name = uniqueName(base: app.name, taken: Set(existing.map { $0.name }))
         let item = LinkItem(
             name: name,
             from: path,
-            to: destination(for: app, path: path),
+            to: uniqueDestination(destination(for: app, path: path), from: path, others: existing),
             defaults: app.defaults?.joined(separator: " && ") ?? ""
         )
         context.insert(item)

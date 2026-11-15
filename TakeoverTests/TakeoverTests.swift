@@ -22,6 +22,12 @@ struct TakeoverTests {
         #expect(RecipeInstaller.destination(appName: "Ableton (2)", from: "~/Music/Ableton/User Library") == "Ableton-UserLibrary")
     }
 
+    @Test func distinguishingPartIsWhereThePathsDiffer() {
+        #expect(RecipeInstaller.distinguishingPart(of: "~/Library/Audio/Plug-Ins", from: "/Library/Audio/Plug-Ins") == "User")
+        #expect(RecipeInstaller.distinguishingPart(of: "/Library/Audio/Plug-Ins", from: "~/Library/Audio/Plug-Ins") == "System")
+        #expect(RecipeInstaller.distinguishingPart(of: "/Volumes/Samples/Kontakt/Presets", from: "~/Documents/Kontakt/Presets") == "Samples")
+    }
+
     @Test func sourceMissingForPathsNotOnThisMac() {
         #expect(!LinkItemInstaller.sourceExists("/Library/Application Support/takeover-test-\(UUID().uuidString)"))
     }

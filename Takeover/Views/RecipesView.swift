@@ -128,28 +128,43 @@ enum RecipeInstaller {
         return "\(base) (\(n))"
     }
 
-    static func cleanName(_ name: String) -> String {
-        name.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "/", with: "-")
+    /// A name made safe to use as one folder name ("/" and ":" can't be in one).
+    static func folderName(_ name: String) -> String {
+        name.replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .trimmingCharacters(in: .whitespaces)
     }
 
-    /// Name of the destination inside the settings folder. Apps with several
-    /// locations get one folder per location so they don't collide.
-    static func destination(for app: AppConfig, path: String) -> String {
-        let clean = cleanName(app.name)
-        guard app.files.count > 1 else { return clean }
-        let last = (path as NSString).lastPathComponent.replacingOccurrences(of: " ", with: "")
-        return "\(clean)-\(last)"
+    /// The app's own folder inside the settings folder: its name, as shown.
+    static func appFolder(_ appName: String) -> String {
+        folderName(baseName(appName))
     }
 
-    /// Settings-folder name for a location the user picked by hand: the app's
-    /// name plus the picked folder's name ("Ableton-Presets"), or just the app's
-    /// name when the folder is named after the app.
-    static func destination(appName: String, from path: String) -> String {
-        let app = cleanName(baseName(appName))
-        let folder = cleanName((path as NSString).lastPathComponent)
-        guard !folder.isEmpty, folder.caseInsensitiveCompare(app) != .orderedSame else { return app }
-        return app.isEmpty ? folder : "\(app)-\(folder)"
+    /// A location's default name: the catalog's name for it, or the path's last
+    /// component without a leading dot ("~/.ssh" -> "ssh").
+    static func locationName(for path: String, named name: String? = nil) -> String {
+        if let name, !name.trimmingCharacters(in: .whitespaces).isEmpty { return folderName(name) }
+        var last = (path as NSString).lastPathComponent
+        while last.hasPrefix(".") { last.removeFirst() }
+        return folderName(last)
     }
+
+    /// Destination of a location inside the settings folder: "App/Location".
+    static func destination(appName: String, location: String) -> String {
+        "\(appFolder(appName))/\(folderName(location))"
+    }
+
+    /// The name a location is shown under. For a destination in the settings
+    /// folder that's its folder's name, so the two always match; for a To the
+    /// user chose elsewhere, the rename label, else the source's name.
+    static func displayName(of item: LinkItem) -> String {
+        if !item.to.isEmpty, !isAbsolute(item.to) { return (item.to as NSString).lastPathComponent }
+        if !item.label.isEmpty { return item.label }
+        let fromName = locationName(for: item.from)
+        return fromName.isEmpty ? baseName(item.name) : fromName
+    }
+
+    static func isAbsolute(_ to: String) -> Bool { to.hasPrefix("/") || to.hasPrefix("~") }
 
     /// The part of `path` that tells it apart from `other`: drop the path
     /// components both end with and take the last one left, so
@@ -165,30 +180,48 @@ enum RecipeInstaller {
         while let a = mine.last, let b = theirs.last, a.caseInsensitiveCompare(b) == .orderedSame {
             mine.removeLast(); theirs.removeLast()
         }
-        return cleanName(mine.last ?? "System")
+        var part = mine.last ?? "System"
+        while part.hasPrefix(".") { part.removeFirst() }
+        return folderName(part.isEmpty ? "System" : part)
     }
 
-    /// `base`, or when another location already uses that To, `base` plus the
-    /// part of the path that differs from that location's ("Kontakt-User-Presets").
-    static func uniqueDestination(_ base: String, from path: String, others: [LinkItem]) -> String {
+    /// "App/Location" for a new location of `appName`, made unique among the
+    /// other locations: when one already uses that folder, the part of the path
+    /// that differs is added ("Plug-Ins (User)"), then a number.
+    static func uniqueDestination(appName: String, location: String, from path: String, others: [LinkItem]) -> String {
+        let base = destination(appName: appName, location: location)
         let taken = Set(others.map { $0.to.lowercased() })
-        guard taken.contains(base.lowercased()),
-              let clash = others.first(where: { $0.to.caseInsensitiveCompare(base) == .orderedSame })
-        else { return base }
-        let candidate = "\(base)-\(distinguishingPart(of: path, from: clash.from))"
-        guard taken.contains(candidate.lowercased()) else { return candidate }
+        guard taken.contains(base.lowercased()) else { return base }
+        let clash = others.first { $0.to.caseInsensitiveCompare(base) == .orderedSame }
+        let part = clash.map { distinguishingPart(of: path, from: $0.from) } ?? ""
+        let named = part.isEmpty ? location : "\(location) (\(part))"
+        let candidate = destination(appName: appName, location: named)
+        if !taken.contains(candidate.lowercased()) { return candidate }
         var n = 2
-        while taken.contains("\(candidate)-\(n)".lowercased()) { n += 1 }
-        return "\(candidate)-\(n)"
+        while taken.contains(destination(appName: appName, location: "\(named) \(n)").lowercased()) { n += 1 }
+        return destination(appName: appName, location: "\(named) \(n)")
+    }
+
+    /// Default "App/Location" for a source path, unique among `others`.
+    static func destination(appName: String, from path: String, named name: String? = nil, others: [LinkItem]) -> String {
+        uniqueDestination(appName: appName, location: locationName(for: path, named: name), from: path, others: others)
+    }
+
+    /// Whether a To is still in the old flat layout ("NativeInstruments-Documents")
+    /// rather than "App/Location".
+    static func needsAppFolder(_ item: LinkItem) -> Bool {
+        guard !item.to.isEmpty, !isAbsolute(item.to) else { return false }
+        let parent = (item.to as NSString).deletingLastPathComponent
+        return parent.caseInsensitiveCompare(appFolder(item.name)) != .orderedSame
     }
 
     @discardableResult
-    static func addLocation(app: AppConfig, path: String, existing: [LinkItem], context: ModelContext) -> LinkItem {
+    static func addLocation(app: AppConfig, file: FileConfig, existing: [LinkItem], context: ModelContext) -> LinkItem {
         let name = uniqueName(base: app.name, taken: Set(existing.map { $0.name }))
         let item = LinkItem(
             name: name,
-            from: path,
-            to: uniqueDestination(destination(for: app, path: path), from: path, others: existing),
+            from: file.path,
+            to: destination(appName: app.name, from: file.path, named: file.name, others: existing),
             defaults: app.defaults?.joined(separator: " && ") ?? ""
         )
         context.insert(item)
@@ -201,7 +234,7 @@ enum RecipeInstaller {
         var all = existing
         var last: LinkItem?
         for file in app.files {
-            last = addLocation(app: app, path: file.path, existing: all, context: context)
+            last = addLocation(app: app, file: file, existing: all, context: context)
             if let last { all.append(last) }
         }
         return last

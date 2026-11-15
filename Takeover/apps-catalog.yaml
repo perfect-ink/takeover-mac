@@ -12,6 +12,13 @@
 # (Native Instruments, Ableton, Image-Line, JetBrains), sync the whole company
 # folder rather than one app's subfolder.
 #
+# Each app syncs into its own folder in the settings folder, with one
+# subfolder per path. Every path has a `name`, based on its source: the last
+# path component without a leading dot (~/.ssh -> "ssh"), or the part that
+# tells it apart when an app has two paths ending the same way ("System
+# Library", "User Library"). The Mac app shows it as the location's name and
+# uses it as that subfolder's name. Names are unique within an app.
+#
 # `os_recipies` keeps the old api/repository.json spelling; the Mac app
 # decodes that key.
 version: 1
@@ -26,149 +33,201 @@ apps:
   - name: SSH
     files:
       - path: ~/.ssh
+        name: ssh
   - name: Apple Music
     files:
       - path: ~/Music/Music
+        name: Music
   - name: Cyberduck
     files:
       - path: ~/Library/Application Support/Cyberduck
+        name: Cyberduck
     defaults:
       - defaults write ch.sudo.cyberduck application.support.path $SYNC_PATH
   - name: TablePlus
     files:
       - path: ~/Library/Application Support/com.tinyapp.TablePlus
+        name: com.tinyapp.TablePlus
   - name: Audio Plug-Ins
     files:
       - path: /Library/Audio/Plug-Ins
-  - name: Audio Plug-Ins (Users)
-    files:
+        name: System Plug-Ins
       - path: ~/Library/Audio/Plug-Ins
+        name: User Plug-Ins
   - name: Native Instruments
     files:
       - path: /Library/Application Support/Native Instruments
+        name: System Library
       - path: ~/Library/Application Support/Native Instruments
+        name: User Library
       - path: ~/Documents/Native Instruments
+        name: Documents
 
   # Shells and command-line tools
   - name: Git
     files:
       - path: ~/.gitconfig
+        name: gitconfig
   - name: Zsh
     files:
       - path: ~/.zshrc
+        name: zshrc
       - path: ~/.zprofile
+        name: zprofile
   - name: Oh My Zsh
     files:
       - path: ~/.oh-my-zsh/custom
+        name: custom
   - name: Bash
     files:
       - path: ~/.bash_profile
+        name: bash_profile
       - path: ~/.bashrc
+        name: bashrc
   - name: Fish
     files:
       - path: ~/.config/fish
+        name: fish
   - name: Starship
     files:
       - path: ~/.config/starship.toml
+        name: starship.toml
   - name: Tmux
     files:
       - path: ~/.tmux.conf
+        name: tmux.conf
   - name: GitHub CLI
     files:
       - path: ~/.config/gh/config.yml
+        name: config.yml
   - name: GnuPG
     files:
       - path: ~/.gnupg/gpg.conf
+        name: gpg.conf
       - path: ~/.gnupg/gpg-agent.conf
+        name: gpg-agent.conf
 
   # Editors and developer tools
   - name: Vim
     files:
       - path: ~/.vimrc
+        name: vimrc
       - path: ~/.vim
+        name: vim
   - name: Neovim
     files:
       - path: ~/.config/nvim
+        name: nvim
   - name: Visual Studio Code
     files:
       - path: ~/Library/Application Support/Code/User/settings.json
+        name: settings.json
       - path: ~/Library/Application Support/Code/User/keybindings.json
+        name: keybindings.json
       - path: ~/Library/Application Support/Code/User/snippets
+        name: snippets
   - name: Cursor
     files:
       - path: ~/Library/Application Support/Cursor/User/settings.json
+        name: settings.json
       - path: ~/Library/Application Support/Cursor/User/keybindings.json
+        name: keybindings.json
       - path: ~/Library/Application Support/Cursor/User/snippets
+        name: snippets
   - name: Zed
     files:
       - path: ~/.config/zed/settings.json
+        name: settings.json
       - path: ~/.config/zed/keymap.json
+        name: keymap.json
   - name: Sublime Text
     files:
       - path: ~/Library/Application Support/Sublime Text/Packages/User
+        name: User
   - name: BBEdit
     files:
       - path: ~/Library/Application Support/BBEdit
+        name: BBEdit
   - name: Xcode
     files:
       - path: ~/Library/Developer/Xcode/UserData/CodeSnippets
+        name: CodeSnippets
       - path: ~/Library/Developer/Xcode/UserData/FontAndColorThemes
+        name: FontAndColorThemes
       - path: ~/Library/Developer/Xcode/UserData/KeyBindings
+        name: KeyBindings
   - name: Fork
     files:
       - path: ~/Library/Application Support/com.DanPristupov.Fork/custom-commands.json
+        name: custom-commands.json
   - name: DBeaver
     files:
       - path: ~/Library/DBeaverData
+        name: DBeaverData
   - name: JetBrains
     files:
       - path: ~/Library/Application Support/JetBrains
+        name: JetBrains
   - name: Insomnia
     files:
       - path: ~/Library/Application Support/Insomnia
+        name: Insomnia
 
   # Terminals
   - name: iTerm2
     files:
       - path: ~/Library/Application Support/iTerm2/DynamicProfiles
+        name: DynamicProfiles
   - name: Ghostty
     files:
       - path: ~/.config/ghostty
+        name: Config
       - path: ~/Library/Application Support/com.mitchellh.ghostty
+        name: Application Support
   - name: Alacritty
     files:
       - path: ~/.config/alacritty
+        name: alacritty
   - name: kitty
     files:
       - path: ~/.config/kitty
+        name: kitty
   - name: WezTerm
     files:
       - path: ~/.wezterm.lua
+        name: wezterm.lua
   - name: Warp
     files:
       - path: ~/.warp
+        name: warp
   - name: Hyper
     files:
       - path: ~/.hyper.js
+        name: hyper.js
 
   # Keyboard and automation
   - name: Karabiner-Elements
     files:
       - path: ~/.config/karabiner
+        name: karabiner
   - name: Hammerspoon
     files:
       - path: ~/.hammerspoon
+        name: hammerspoon
   - name: Keyboard Maestro
     files:
       - path: ~/Library/Application Support/Keyboard Maestro
+        name: Keyboard Maestro
 
   # Music and audio
   - name: Audio Presets
     files:
       - path: /Library/Audio/Presets
+        name: Presets
   - name: Audio Presets (Users)
     files:
       - path: ~/Library/Audio/Presets
+        name: Presets
   # Ableton's Application Support folder also holds each Live version's
   # Unlock folder (machine-bound authorization), so only its Library is synced.
   # ~/Library/Preferences/Ableton is a folder of Live's own .cfg files, not
@@ -176,28 +235,37 @@ apps:
   - name: Ableton Live
     files:
       - path: ~/Music/Ableton
+        name: Music
       - path: ~/Library/Application Support/Ableton/Library
+        name: Library
       - path: ~/Library/Preferences/Ableton
+        name: Preferences
   - name: Logic Pro
     files:
       - path: ~/Music/Audio Music Apps
+        name: Audio Music Apps
   - name: REAPER
     files:
       - path: ~/Library/Application Support/REAPER
+        name: REAPER
   - name: Bitwig Studio
     files:
       - path: ~/Documents/Bitwig Studio
+        name: Bitwig Studio
   - name: FL Studio
     files:
       - path: ~/Documents/Image-Line
+        name: Image-Line
 
   # Design and 3D
   - name: Sketch
     files:
       - path: ~/Library/Application Support/com.bohemiancoding.sketch3/Plugins
+        name: Plugins
   - name: Blender
     files:
       - path: ~/Library/Application Support/Blender
+        name: Blender
 
   # Audio plug-in vendors. Each syncs the vendor's own folder; the Audio
   # Presets entries above already hold every vendor's Audio/Presets folder,
@@ -205,38 +273,56 @@ apps:
   - name: Serum (Xfer Records)
     files:
       - path: /Library/Audio/Presets/Xfer Records
+        name: System Presets
       - path: ~/Library/Audio/Presets/Xfer Records
+        name: User Presets
       - path: ~/Library/Application Support/Xfer
+        name: Application Support
   - name: u-he
     files:
       - path: ~/Library/Application Support/u-he
+        name: Application Support
       - path: ~/Library/Audio/Presets/u-he
+        name: Presets
   - name: Arturia
     files:
       - path: /Library/Arturia
+        name: System Library
       - path: ~/Library/Arturia
+        name: User Library
       - path: ~/Library/Application Support/Arturia
+        name: Application Support
   - name: FabFilter
     files:
       - path: ~/Documents/FabFilter
+        name: Documents
       - path: ~/Library/Application Support/FabFilter
+        name: Application Support
   - name: Valhalla DSP
     files:
       - path: /Library/Application Support/Valhalla DSP, LLC
+        name: Valhalla DSP, LLC
   - name: iZotope
     files:
       - path: ~/Documents/iZotope
+        name: Documents
       - path: ~/Library/Application Support/iZotope
+        name: Application Support
   - name: Reason Studios
     files:
       - path: ~/Music/Reason Studios
+        name: Music
       - path: ~/Library/Application Support/Propellerhead Software
+        name: Propellerhead Software
       - path: ~/Library/Application Support/Reason Studios
+        name: Application Support
   # Waves keeps its licenses in /Library/Application Support/Waves/Licenses,
   # which stays out; this is the per-user Waves Audio folder only.
   - name: Waves
     files:
       - path: ~/Library/Application Support/Waves Audio
+        name: Waves Audio
   - name: Spitfire Audio
     files:
       - path: ~/Library/Application Support/Spitfire Audio
+        name: Spitfire Audio

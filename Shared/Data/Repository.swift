@@ -46,21 +46,31 @@ struct AppConfig: Decodable, Identifiable {
 
 struct FileConfig: Decodable {
     let path: String
+    /// The location's name, which is also its folder inside the app's folder.
+    /// Optional: without it the path's last component is used.
+    let name: String?
+
+    init(path: String, name: String? = nil) {
+        self.path = path
+        self.name = name
+    }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         if let pathString = try? container.decode(String.self) {
             // Handle string format: "/Library/Audio/Plug-Ins"
             self.path = pathString
+            self.name = nil
         } else {
-            // Handle object format: {"path": "~/.ssh"}
+            // Handle object format: {"path": "~/.ssh", "name": "SSH"}
             let fileObject = try decoder.container(keyedBy: CodingKeys.self)
             self.path = try fileObject.decode(String.self, forKey: .path)
+            self.name = try fileObject.decodeIfPresent(String.self, forKey: .name)
         }
     }
 
     enum CodingKeys: String, CodingKey {
-        case path
+        case path, name
     }
 }
 

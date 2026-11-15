@@ -25,6 +25,7 @@ struct LinkItemDetailView: View {
     @State private var showCommand = false
     @State private var renaming = false
     @State private var draftLabel = ""
+    @State private var renameError: String?
     @FocusState private var renameFocused: Bool
 
     init(linkItem: LinkItem,
@@ -52,13 +53,13 @@ struct LinkItemDetailView: View {
                             .onSubmit { commitRename() }
                             .onExitCommand { renaming = false }
                     } else {
-                        Text(linkItem.label.isEmpty ? linkItem.name : linkItem.label).font(.headline)
+                        Text(RecipeInstaller.displayName(of: linkItem)).font(.headline)
                     }
                     Spacer()
                     statusAndButtons
                     Menu {
                         Button("Rename") {
-                            draftLabel = linkItem.label.isEmpty ? linkItem.name : linkItem.label
+                            draftLabel = RecipeInstaller.displayName(of: linkItem)
                             renaming = true
                             renameFocused = true
                         }
@@ -263,6 +264,14 @@ struct LinkItemDetailView: View {
         .card(enabled: embedded, padding: 16)
         .padding(embedded ? 0 : 24)
         .frame(minWidth: embedded ? 0 : 400)
+        .alert(
+            "Couldn't rename this location",
+            isPresented: Binding(get: { renameError != nil }, set: { if !$0 { renameError = nil } })
+        ) {
+            Button("OK", role: .cancel) { renameError = nil }
+        } message: {
+            Text(renameError ?? "")
+        }
         .onChange(of: linkItem.name) { oldValue, newValue in
             if oldValue != newValue {
                 saveChangesToYAML()
@@ -301,10 +310,27 @@ struct LinkItemDetailView: View {
         }
     }
 
+    /// Renames the location. Its destination folder in the settings folder is
+    /// renamed with it so the two keep matching (and a linked location is
+    /// relinked to the new folder); a To chosen outside the settings folder
+    /// only gets a new label.
     private func commitRename() {
-        let new = draftLabel.trimmingCharacters(in: .whitespaces)
-        linkItem.label = (new == linkItem.name) ? "" : new
         renaming = false
+        let new = RecipeInstaller.folderName(draftLabel)
+        guard !new.isEmpty, new != RecipeInstaller.displayName(of: linkItem) else { return }
+        if RecipeInstaller.isAbsolute(linkItem.to) || linkItem.to.isEmpty {
+            linkItem.label = new
+        } else {
+            let to = RecipeInstaller.uniqueDestination(appName: linkItem.name, location: new, from: linkItem.from, others: otherItems)
+            do {
+                try LinkItemInstaller.moveDestination(of: linkItem, to: to)
+            } catch {
+                renameError = error.localizedDescription
+                return
+            }
+            linkItem.to = to
+            linkItem.label = ""
+        }
         onSave?(linkItem)
     }
 
@@ -337,10 +363,13 @@ struct LinkItemDetailView: View {
     /// path) alone. Not called for a location that was linked, so an installed
     /// destination never moves.
     private func updateToForPickedSource() {
-        guard !linkItem.to.hasPrefix("/"), !linkItem.to.hasPrefix("~") else { return }
-        let base = RecipeInstaller.destination(appName: linkItem.name, from: linkItem.from)
-        let others = allLinkItems.filter { $0.persistentModelID != linkItem.persistentModelID }
-        linkItem.to = RecipeInstaller.uniqueDestination(base, from: linkItem.from, others: others)
+        guard !RecipeInstaller.isAbsolute(linkItem.to) else { return }
+        linkItem.to = RecipeInstaller.destination(appName: linkItem.name, from: linkItem.from, others: otherItems)
+        linkItem.label = ""
+    }
+
+    private var otherItems: [LinkItem] {
+        allLinkItems.filter { $0.persistentModelID != linkItem.persistentModelID }
     }
 
     /// Shown when the source isn't on this Mac, so installing doesn't quietly

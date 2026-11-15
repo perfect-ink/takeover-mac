@@ -173,6 +173,36 @@ struct LinkItemInstaller {
         }
     }
 
+    /// Moves a location's destination to `newTo` (a name in the settings folder
+    /// or a path) and, when it's linked, points the link at the new place.
+    /// Nothing on disk changes when there's nothing at the old destination.
+    @MainActor
+    static func moveDestination(of linkItem: LinkItem, to newTo: String) throws {
+        let oldPath = Config.expandedDestinationPath(for: linkItem.to)
+        let newPath = Config.expandedDestinationPath(for: newTo)
+        guard !linkItem.to.isEmpty, oldPath != newPath, FileOps.exists(oldPath) else { return }
+        // FileOps.move replaces what's there; never clobber another folder.
+        guard !FileOps.exists(newPath) else {
+            throw LinkInstallError.moveToBackupFailed("\(newPath) already exists.")
+        }
+        let linked = isLinked(linkItem)
+        do {
+            try FileOps.makeDirectory((newPath as NSString).deletingLastPathComponent, allowPrivileged: true)
+            try FileOps.move(from: oldPath, to: newPath, allowPrivileged: true)
+        } catch {
+            throw LinkInstallError.moveToBackupFailed(error.localizedDescription)
+        }
+        guard linked else { return }
+        let originalPath = PathUtility.expandTildeToRealHome(linkItem.from)
+        do {
+            try FileOps.remove(originalPath, allowPrivileged: true)
+            try FileOps.symlink(at: originalPath, to: newPath, allowPrivileged: true)
+        } catch {
+            throw LinkInstallError.symlinkFailed(error.localizedDescription)
+        }
+        try verifyLink(originalPath: originalPath, backupPath: newPath)
+    }
+
     // MARK: - Helpers
 
     /// Whether a sync location's source is on this Mac, as a real file or

@@ -254,11 +254,35 @@ struct LinkItemListView: View {
                 .map { PathUtility.expandTildeToRealHome($0.from) })
             for file in app.files where !have.contains(PathUtility.expandTildeToRealHome(file.path))
                 && !RemovedLocations.contains(app: app.name, path: file.path) {
-                all.append(RecipeInstaller.addLocation(app: app, path: file.path, existing: all, context: modelContext))
+                all.append(RecipeInstaller.addLocation(app: app, file: file, existing: all, context: modelContext))
                 added = true
             }
         }
+        if moveIntoAppFolders(all, apps: apps) { added = true }
         if added { Task { await saveToYAML() } }
+    }
+
+    /// Gives locations from before app folders an "App/Location" To. Only ones
+    /// that aren't linked and have nothing at their old destination, so no
+    /// files or links are left behind.
+    private func moveIntoAppFolders(_ all: [LinkItem], apps: [AppConfig]) -> Bool {
+        var changed = false
+        for item in all where RecipeInstaller.needsAppFolder(item)
+            && LinkItemInstaller.status(item) == .notInstalled
+            && !FileOps.exists(Config.expandedDestinationPath(for: item.to)) {
+            let from = PathUtility.expandTildeToRealHome(item.from)
+            let catalogName = apps.first { $0.name == RecipeInstaller.baseName(item.name) }?
+                .files.first { PathUtility.expandTildeToRealHome($0.path) == from }?.name
+            let name = item.label.isEmpty ? catalogName : item.label
+            let others = all.filter { $0 !== item }
+            item.to = item.from.isEmpty
+                ? RecipeInstaller.uniqueDestination(appName: item.name, location: name ?? "Location", from: "", others: others)
+                : RecipeInstaller.destination(appName: item.name, from: item.from, named: name, others: others)
+            item.label = ""
+            changed = true
+        }
+        if changed { try? modelContext.save() }
+        return changed
     }
 
     /// Adds a sync setting of the user's own: pick a folder or file, and it's
@@ -276,8 +300,7 @@ struct LinkItemListView: View {
         let from = PathUtility.abbreviateRealHome(url.path)
         let taken = Set(linkItems.map { $0.name } + groups.map { $0.id })
         let name = RecipeInstaller.uniqueName(base: url.lastPathComponent, taken: taken)
-        let to = RecipeInstaller.uniqueDestination(
-            RecipeInstaller.destination(appName: name, from: from), from: from, others: linkItems)
+        let to = RecipeInstaller.destination(appName: name, from: from, others: linkItems)
         modelContext.insert(LinkItem(name: name, from: from, to: to))
         try? modelContext.save()
         selection = RecipeInstaller.baseName(name)
@@ -297,7 +320,8 @@ struct LinkItemListView: View {
     /// Adds a blank location to the app for the user to fill in.
     private func addLocation(to group: AppGroup) {
         let name = RecipeInstaller.uniqueName(base: group.id, taken: Set(linkItems.map { $0.name }))
-        let to = "\(RecipeInstaller.cleanName(group.id))-\(group.items.count + 1)"
+        let to = RecipeInstaller.uniqueDestination(
+            appName: group.id, location: "Location \(group.items.count + 1)", from: "", others: linkItems)
         modelContext.insert(LinkItem(name: name, to: to))
         try? modelContext.save()
         Task { await saveToYAML() }

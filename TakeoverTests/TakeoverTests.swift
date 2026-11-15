@@ -17,9 +17,29 @@ struct TakeoverTests {
         #expect(LinkItemInstaller.sourceExists(""))
     }
 
-    @Test func destinationNamedAfterPickedFolder() {
-        #expect(RecipeInstaller.destination(appName: "Native Instruments", from: "/Library/Application Support/Native Instruments") == "NativeInstruments")
-        #expect(RecipeInstaller.destination(appName: "Ableton (2)", from: "~/Music/Ableton/User Library") == "Ableton-UserLibrary")
+    @Test func destinationIsAppFolderThenLocationFolder() {
+        #expect(RecipeInstaller.destination(appName: "Ableton (2)", from: "~/Music/Ableton/User Library", others: []) == "Ableton/User Library")
+        #expect(RecipeInstaller.destination(appName: "SSH", from: "~/.ssh", others: []) == "SSH/ssh")
+        #expect(RecipeInstaller.destination(appName: "Native Instruments", from: "~/Documents/Native Instruments", named: "Documents", others: []) == "Native Instruments/Documents")
+        #expect(RecipeInstaller.destination(appName: "Audio Plug-Ins (Users)", from: "~/Library/Audio/Plug-Ins", named: "User Plug-Ins", others: []) == "Audio Plug-Ins/User Plug-Ins")
+    }
+
+    @Test func clashingLocationsGetTheDifferingPart() {
+        let system = LinkItem(name: "Audio Plug-Ins", from: "/Library/Audio/Plug-Ins", to: "Audio Plug-Ins/Plug-Ins")
+        #expect(RecipeInstaller.destination(appName: "Audio Plug-Ins", from: "~/Library/Audio/Plug-Ins", others: [system]) == "Audio Plug-Ins/Plug-Ins (User)")
+    }
+
+    @Test func locationNameMatchesItsDestinationFolder() {
+        #expect(RecipeInstaller.displayName(of: LinkItem(name: "Serum", from: "~/Library/Application Support/Xfer", to: "Serum/Application Support")) == "Application Support")
+        #expect(RecipeInstaller.displayName(of: LinkItem(name: "X", from: "~/x", to: "/Volumes/Backup/x", label: "Backup")) == "Backup")
+        #expect(RecipeInstaller.needsAppFolder(LinkItem(name: "Native Instruments (2)", from: "~/x", to: "NativeInstruments-x")))
+        #expect(!RecipeInstaller.needsAppFolder(LinkItem(name: "Native Instruments (2)", from: "~/x", to: "Native Instruments/x")))
+    }
+
+    @Test func catalogLocationNamesDecode() throws {
+        let yaml = #"[{"path": "~/Documents/Native Instruments", "name": "Documents"}, "/Library/Audio/Plug-Ins"]"#
+        let files = try JSONDecoder().decode([FileConfig].self, from: Data(yaml.utf8))
+        #expect(files.map(\.name) == ["Documents", nil])
     }
 
     @Test func distinguishingPartIsWhereThePathsDiffer() {

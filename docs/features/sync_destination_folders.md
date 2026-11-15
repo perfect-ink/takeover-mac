@@ -1,0 +1,15 @@
+# Sync destinations: app folder, then location folder
+
+Every sync location's destination is `[settings folder]/[app name]/[location name]`, and the location's name in Sync Settings is that folder's name, so the two always match. For example Serum's `~/Library/Application Support/Xfer` syncs to `Takeover/Serum (Xfer Records)/Application Support`.
+
+- **Names come from the API.** Every path in takeover-site's `public/catalog/apps.yaml` has a `name`, based on its source: the last path component without a leading dot (`~/.ssh` is `ssh`), or the part that tells two paths apart (`System Library`, `User Library`). `/api/v1/repository` passes it through; the Mac decodes it as `FileConfig.name` (`Shared/Data/Repository.swift`). The bundled `Takeover/apps-catalog.yaml` is refreshed by `make catalog`.
+- **Building To.** `RecipeInstaller` in `Takeover/Views/RecipesView.swift`: `appFolder` is the app's name as shown (`baseName`, so `Ableton (2)` and `Audio Plug-Ins (Users)` share their app's folder), `locationName(for:named:)` is the catalog name or the path's last component, and `destination(appName:from:named:others:)` joins them. If another location already uses that folder, `uniqueDestination` adds the differing part of the path (`Plug-Ins (User)`), then a number. Used when seeding catalog locations, by Add (a sync setting of your own), by Add Location (`Location 2`), and when a new From is picked.
+- **Shown name.** `RecipeInstaller.displayName(of:)`: the last component of a To in the settings folder. For a To the user chose elsewhere (an absolute or `~` path) it's the rename label, else the source's name.
+- **Rename** (location's ••• menu, `LinkItemDetailView.commitRename`) renames the destination folder too, through `LinkItemInstaller.moveDestination(of:to:)`: it moves the folder if there is one (refusing to replace an existing folder) and relinks the source when it's linked. A To outside the settings folder only gets a label.
+- **Older locations.** On load, locations still in the old flat layout (`NativeInstruments-Documents`) move to `App/Location` only when they aren't linked and nothing is at their old destination (`LinkItemListView.moveIntoAppFolders`). Linked ones keep their folder until renamed, which moves them into the app's folder.
+- Tests: `destinationIsAppFolderThenLocationFolder`, `clashingLocationsGetTheDifferingPart`, `locationNameMatchesItsDestinationFolder`, `catalogLocationNamesDecode`, `distinguishingPartIsWhereThePathsDiffer` in `TakeoverTests/TakeoverTests.swift`; takeover-site's `catalog_test.rb` checks every path has a name, unique within its app.
+- Limits: other Macs linked to a renamed location's old folder see it as linked elsewhere until they reinstall it.
+
+## History
+
+- Implemented 2026-11-15. Not compiled locally (Linux session, no Swift toolchain); the GitHub Actions build on main compiles it and runs `make test`. Not yet in a release.

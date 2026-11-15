@@ -1,6 +1,6 @@
 # Add a sync setting
 
-The **Add** (+) button in the Sync Settings action bar (`addSyncSetting()` in `Takeover/Views/LinkItemListView.swift`) adds a sync setting that isn't in the recipe catalog.
+The **Add** (+) button at the top of the Sync Settings sidebar (`addSyncSetting()` in `Takeover/Views/LinkItemListView.swift`) adds a sync setting that isn't in the recipe catalog.
 
 - It opens a picker for the folder or file to sync. The new setting is named after it, From is that path (`~`-abbreviated under home), and To comes from `RecipeInstaller.destination(appName:from:)` plus `uniqueDestination` (see [picked_source_destination.md](picked_source_destination.md)).
 - If the name is taken, it gets " (2)" and so on, which adds it as another location of the existing app with that name.

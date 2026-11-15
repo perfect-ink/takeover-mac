@@ -42,12 +42,7 @@ struct LinkItemListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TabActionBar(title: "Sync Settings") {
-                Button(action: addSyncSetting) {
-                    Label("Add", systemImage: "plus")
-                }
-                .help("Add a sync setting: pick the folder or file to sync")
-            }
+            TabActionBar(title: "Sync Settings") { EmptyView() }
 
             HStack(spacing: 0) {
                 sidebar
@@ -100,9 +95,12 @@ struct LinkItemListView: View {
 
     // MARK: sidebar
 
-    /// Show All and Refresh sit above the list they change.
+    /// Add, Show All and Refresh sit above the list they change.
     private var sidebarControls: some View {
         HStack(spacing: 8) {
+            Button(action: addSyncSetting) { Image(systemName: "plus") }
+                .buttonStyle(.borderless)
+                .help("Add a sync setting: pick the folder or file to sync")
             Toggle(isOn: $showAll) {
                 Label("Show All", systemImage: showAll ? "eye" : "eye.slash")
             }

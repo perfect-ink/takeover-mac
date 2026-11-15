@@ -41,10 +41,14 @@ struct AppDetailView: View {
                         LinkStatusIcon(status: appStatus)
                     }
                     if allLinked {
-                        Button("Uninstall") { onUninstallAll(group.items) }
+                        Button { onUninstallAll(group.items) } label: {
+                            Label("Uninstall All", systemImage: "arrow.uturn.backward.circle")
+                        }
                     } else {
-                        Button("Install All") {
+                        Button {
                             for item in group.items where !LinkItemInstaller.isLinked(item) { onRun(item) }
+                        } label: {
+                            Label("Install All", systemImage: "arrow.down.circle")
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(group.items.isEmpty)

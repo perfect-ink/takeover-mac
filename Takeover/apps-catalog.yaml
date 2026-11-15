@@ -51,17 +51,6 @@ apps:
   - name: Git
     files:
       - path: ~/.gitconfig
-  - name: Zsh
-    files:
-      - path: ~/.zshrc
-      - path: ~/.zprofile
-  - name: Oh My Zsh
-    files:
-      - path: ~/.oh-my-zsh/custom
-  - name: Bash
-    files:
-      - path: ~/.bash_profile
-      - path: ~/.bashrc
   - name: Fish
     files:
       - path: ~/.config/fish

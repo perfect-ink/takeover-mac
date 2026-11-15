@@ -46,11 +46,24 @@ apps:
   - name: Native Instruments
     files:
       - path: /Library/Application Support/Native Instruments
+      - path: ~/Library/Application Support/Native Instruments
+      - path: ~/Documents/Native Instruments
 
   # Shells and command-line tools
   - name: Git
     files:
       - path: ~/.gitconfig
+  - name: Zsh
+    files:
+      - path: ~/.zshrc
+      - path: ~/.zprofile
+  - name: Oh My Zsh
+    files:
+      - path: ~/.oh-my-zsh/custom
+  - name: Bash
+    files:
+      - path: ~/.bash_profile
+      - path: ~/.bashrc
   - name: Fish
     files:
       - path: ~/.config/fish
@@ -156,9 +169,15 @@ apps:
   - name: Audio Presets (Users)
     files:
       - path: ~/Library/Audio/Presets
+  # Ableton's Application Support folder also holds each Live version's
+  # Unlock folder (machine-bound authorization), so only its Library is synced.
+  # ~/Library/Preferences/Ableton is a folder of Live's own .cfg files, not
+  # plists, so it symlinks fine.
   - name: Ableton Live
     files:
       - path: ~/Music/Ableton
+      - path: ~/Library/Application Support/Ableton/Library
+      - path: ~/Library/Preferences/Ableton
   - name: Logic Pro
     files:
       - path: ~/Music/Audio Music Apps
@@ -186,6 +205,8 @@ apps:
   - name: Serum (Xfer Records)
     files:
       - path: /Library/Audio/Presets/Xfer Records
+      - path: ~/Library/Audio/Presets/Xfer Records
+      - path: ~/Library/Application Support/Xfer
   - name: u-he
     files:
       - path: ~/Library/Application Support/u-he
@@ -193,6 +214,8 @@ apps:
   - name: Arturia
     files:
       - path: /Library/Arturia
+      - path: ~/Library/Arturia
+      - path: ~/Library/Application Support/Arturia
   - name: FabFilter
     files:
       - path: ~/Documents/FabFilter
@@ -203,7 +226,17 @@ apps:
   - name: iZotope
     files:
       - path: ~/Documents/iZotope
+      - path: ~/Library/Application Support/iZotope
   - name: Reason Studios
     files:
       - path: ~/Music/Reason Studios
       - path: ~/Library/Application Support/Propellerhead Software
+      - path: ~/Library/Application Support/Reason Studios
+  # Waves keeps its licenses in /Library/Application Support/Waves/Licenses,
+  # which stays out; this is the per-user Waves Audio folder only.
+  - name: Waves
+    files:
+      - path: ~/Library/Application Support/Waves Audio
+  - name: Spitfire Audio
+    files:
+      - path: ~/Library/Application Support/Spitfire Audio

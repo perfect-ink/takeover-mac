@@ -8,3 +8,4 @@ One file per feature; see docs/rules/feature-docs.md.
 - [self_service_apps.md](self_service_apps.md): the Applications tab's app cards (Install, or Open and Uninstall) and the Always install flag.
 - [storage_choice.md](storage_choice.md): where settings live, asked once on first open.
 - [restore.md](restore.md): restore a Mac from any Takeover folder or Takeover Cloud Mac; Apply All.
+- [installed_apps_filter.md](installed_apps_filter.md): Sync Settings shows only apps on this Mac, with a Show All toggle.

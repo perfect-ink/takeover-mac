@@ -36,10 +36,17 @@ struct LinkItemListView: View {
     @State private var pendingUninstall: [LinkItem] = []
     /// Bumped after any link change so link status (read from disk) redraws.
     @State private var linkRefresh = 0
+    /// Off by default: the sidebar lists only apps that are on this Mac.
+    @AppStorage("syncSettings.showAll") private var showAll = false
 
     var body: some View {
         VStack(spacing: 0) {
             TabActionBar(title: "Sync Settings") {
+                Toggle(isOn: $showAll) {
+                    Label(showAll ? "Showing All" : "Show All", systemImage: showAll ? "eye" : "eye.slash")
+                }
+                .toggleStyle(.button)
+                .help(showAll ? "Hide apps that aren't on this Mac" : "Also show apps that aren't on this Mac (\(hiddenCount) hidden)")
                 if repository.isLoading { ProgressView().scaleEffect(0.6) }
                 Button {
                     Task { await repository.load(force: true) }
@@ -101,13 +108,18 @@ struct LinkItemListView: View {
 
     private var sidebar: some View {
         Group {
-            if groups.isEmpty {
-                Text("No Sync Settings")
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if visibleGroups.isEmpty {
+                VStack(spacing: 8) {
+                    Text(groups.isEmpty ? "No Sync Settings" : "No apps found on this Mac")
+                        .foregroundColor(.secondary)
+                    if !groups.isEmpty {
+                        Button("Show All") { showAll = true }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(selection: $selection) {
-                    ForEach(groups) { group in
+                    ForEach(visibleGroups) { group in
                         HStack {
                             Text(group.id).fontWeight(.medium)
                             Spacer()
@@ -130,11 +142,23 @@ struct LinkItemListView: View {
                 .listStyle(.plain)
                 .environment(\.defaultMinListHeaderHeight, 0)
                 .onAppear {
-                    if selection == nil { selection = groups.first?.id }
+                    if selection == nil { selection = visibleGroups.first?.id }
                 }
             }
         }
     }
+
+    /// What the sidebar lists: every group with Show All on; otherwise only apps
+    /// on this Mac, plus ones still being set up (a location with no From yet)
+    /// and the selected one, so nothing vanishes while you're editing it.
+    private var visibleGroups: [AppGroup] {
+        guard !showAll else { return groups }
+        return groups.filter { group in
+            group.installed || group.id == selection || group.items.contains { $0.from.isEmpty }
+        }
+    }
+
+    private var hiddenCount: Int { groups.count - visibleGroups.count }
 
     /// Catalog apps and the user's own items as one list; apps that aren't installed sort last, greyed out.
     private var groups: [AppGroup] {

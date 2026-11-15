@@ -138,7 +138,7 @@ struct LinkItemDetailView: View {
 
                         Button("Browse...") {
                             Task {
-                                if let path = try await selectFile() {
+                                if let path = try await selectFile(startingAt: fromBrowseStart) {
                                     let wasLinked = LinkItemInstaller.isLinked(linkItem)
                                     linkItem.from = path
                                     if !wasLinked { updateToForPickedSource() }
@@ -209,8 +209,8 @@ struct LinkItemDetailView: View {
 
                         Button("Browse...") {
                             Task {
-                                if let path = try await selectFile() {
-                                    linkItem.to = path
+                                if let path = try await selectFile(startingAt: toBrowseStart) {
+                                    linkItem.to = toValue(forPicked: path)
                                 }
                             }
                         }
@@ -372,8 +372,42 @@ struct LinkItemDetailView: View {
         return Config.destinationPath(for: linkItem.to)
     }
 
-    func selectFile() async throws -> String? {
+    /// Nearest folder that exists at or above `path`, for an open panel to start in.
+    private func existingFolder(for path: String) -> String? {
+        var dir = PathUtility.expandTildeToRealHome(path)
+        while !dir.isEmpty, dir != "/" {
+            if FileOps.isDirectory(dir) { return dir }
+            dir = (dir as NSString).deletingLastPathComponent
+        }
+        return nil
+    }
+
+    /// From's Browse starts at the current From (or its nearest existing parent).
+    private var fromBrowseStart: String? {
+        linkItem.from.isEmpty ? nil : existingFolder(for: linkItem.from)
+    }
+
+    /// To's Browse starts in the settings folder: at the current To's parent so
+    /// it's selectable, or the settings folder itself when To isn't there yet.
+    private var toBrowseStart: String? {
+        let root = Config.expandedBackupPath
+        guard !linkItem.to.isEmpty else { return existingFolder(for: root) }
+        let dest = Config.expandedDestinationPath(for: linkItem.to)
+        return existingFolder(for: (dest as NSString).deletingLastPathComponent) ?? existingFolder(for: root)
+    }
+
+    /// A pick inside the settings folder is stored as its name there (so it moves
+    /// with the folder); anything else as the absolute path.
+    private func toValue(forPicked path: String) -> String {
+        let root = (Config.expandedBackupPath as NSString).standardizingPath
+        let picked = (path as NSString).standardizingPath
+        guard picked.hasPrefix(root + "/") else { return PathUtility.abbreviateRealHome(path) }
+        return String(picked.dropFirst(root.count + 1))
+    }
+
+    func selectFile(startingAt directory: String? = nil) async throws -> String? {
         let panel = NSOpenPanel()
+        if let directory { panel.directoryURL = URL(fileURLWithPath: directory, isDirectory: true) }
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true

@@ -141,6 +141,16 @@ enum RecipeInstaller {
         return "\(clean)-\(last)"
     }
 
+    /// Settings-folder name for a location the user picked by hand: the app's
+    /// name plus the picked folder's name ("Ableton-Presets"), or just the app's
+    /// name when the folder is named after the app.
+    static func destination(appName: String, from path: String) -> String {
+        let app = cleanName(baseName(appName))
+        let folder = cleanName((path as NSString).lastPathComponent)
+        guard !folder.isEmpty, folder.caseInsensitiveCompare(app) != .orderedSame else { return app }
+        return app.isEmpty ? folder : "\(app)-\(folder)"
+    }
+
     @discardableResult
     static func addLocation(app: AppConfig, path: String, existing: [LinkItem], context: ModelContext) -> LinkItem {
         let name = uniqueName(base: app.name, taken: Set(existing.map { $0.name }))

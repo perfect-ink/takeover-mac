@@ -137,7 +137,9 @@ struct LinkItemDetailView: View {
                         Button("Browse...") {
                             Task {
                                 if let path = try await selectFile() {
+                                    let wasLinked = LinkItemInstaller.isLinked(linkItem)
                                     linkItem.from = path
+                                    if !wasLinked { updateToForPickedSource() }
                                 }
                             }
                         }
@@ -328,6 +330,15 @@ struct LinkItemDetailView: View {
 
     private var statusIcon: some View {
         LinkStatusIcon(status: LinkItemInstaller.status(linkItem))
+    }
+
+    /// After picking a From folder, name the destination after it so To reflects
+    /// what's being synced. Leaves a To the user chose themselves (an absolute
+    /// path) alone. Not called for a location that was linked, so an installed
+    /// destination never moves.
+    private func updateToForPickedSource() {
+        guard !linkItem.to.hasPrefix("/"), !linkItem.to.hasPrefix("~") else { return }
+        linkItem.to = RecipeInstaller.destination(appName: linkItem.name, from: linkItem.from)
     }
 
     /// Shown when the source isn't on this Mac, so installing doesn't quietly

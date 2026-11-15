@@ -17,6 +17,11 @@ struct TakeoverTests {
         #expect(LinkItemInstaller.sourceExists(""))
     }
 
+    @Test func destinationNamedAfterPickedFolder() {
+        #expect(RecipeInstaller.destination(appName: "Native Instruments", from: "/Library/Application Support/Native Instruments") == "NativeInstruments")
+        #expect(RecipeInstaller.destination(appName: "Ableton (2)", from: "~/Music/Ableton/User Library") == "Ableton-UserLibrary")
+    }
+
     @Test func sourceMissingForPathsNotOnThisMac() {
         #expect(!LinkItemInstaller.sourceExists("/Library/Application Support/takeover-test-\(UUID().uuidString)"))
     }

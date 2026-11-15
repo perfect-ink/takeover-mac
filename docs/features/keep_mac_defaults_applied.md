@@ -18,7 +18,7 @@ The Mac defaults a user picks (the ones with a value in `mac-defaults.yaml` in t
 - **Takeover Cloud:** while the app is closed, the helper pulls a newer profile every 3 minutes (`ProfileSyncManager.pullIfNewer`, never pushes). The pull rewrites the files, which the watcher then applies. While the app is open, the app does its own pulls.
 - **App open:** `SettingsDiskWatcher` reloads the app's lists when the settings files change underneath it (another Mac, or the helper's pull), so the app never saves a stale copy back. If the helper isn't running (not approved yet, debug build), the app also applies defaults at launch, after a storage choice, and on file changes.
 - **Which defaults:** catalog defaults take their domain/key/type/follow-up from the catalog (same as the tab); custom ones use their own. Catalog defaults the catalog hides on this macOS version are skipped.
-- **Reuse:** `MacDefaultsEnforcer.enforce(_ configs:)` applies any list of `MacDefaultConfig`, for example a profile being restored.
+- **Restore:** Apply All in the Restore tab applies picked defaults through `MacDefaultsEnforcer.enforce(_ configs:)` too, so they show "applied" or "already set" and each follow-up runs once.
 
 Logs: `log stream --predicate 'subsystem == "alexvaos.Takeover"'` (categories `defaults-agent` and `mac-defaults`).
 

@@ -16,7 +16,7 @@ The **Restore** tab (`Takeover/Views/RestoreView.swift`) has a source list on th
 
 - `SettingsManager.read(folder:)` (`Shared/Models/SettingsYaml.swift`) reads `takeover-settings.yaml` and `mac-defaults.yaml` from any folder without changing it; `Profile(settings:catalog:)` turns that into the same `Profile` the account uses.
 - `StorageLocation.forFolder(_:)` maps a picked folder to iCloud Drive, Dropbox or a plain folder choice.
-- Applying: `MacDefaultInstaller.apply`, `LinkItemInstaller.install`, `AppRestoreEngine.install`; rows are upserted into the local lists.
+- Applying: `MacDefaultsEnforcer.enforce` (only differing defaults are written, each follow-up runs once; see keep_mac_defaults_applied.md), `LinkItemInstaller.install`, `AppRestoreEngine.install`; rows are upserted into the local lists.
 - `alwaysInstall` lives on `AppEntryModel`, `AppEntryConfig` (`always_install` in the settings file) and `Profile.AppEntry`.
 
 ## Known limits

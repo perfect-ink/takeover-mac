@@ -370,13 +370,20 @@ struct RestoreView: View {
             }
         }
 
-        for d in profile.macDefaults where pickedDefaults.contains(d.id) {
-            outcomes[d.id] = "… applying"
-            let model = MacDefault(name: d.name, domain: d.domain, key: d.key, type: d.type,
-                                   value: d.value, hostFlag: d.hostFlag, postCommand: d.postCommand)
-            MacDefaultInstaller.apply(macDefault: model)
-            upsertDefault(d)
-            outcomes[d.id] = "✓ applied"; ok += 1
+        // Same path as login/sync enforcement: only differing defaults are
+        // written, and each follow-up (killall Dock…) runs once.
+        let defaults = profile.macDefaults.filter { pickedDefaults.contains($0.id) }
+        let result = MacDefaultsEnforcer.enforce(defaults.map {
+            MacDefaultConfig(name: $0.name, domain: $0.domain, key: $0.key, type: $0.type, value: $0.value,
+                             hostFlag: $0.hostFlag, postCommand: $0.postCommand)
+        })
+        for d in defaults {
+            if result.failed.contains(d.name) {
+                outcomes[d.id] = "✗ couldn't write"; fail += 1
+            } else {
+                upsertDefault(d)
+                outcomes[d.id] = result.applied.contains(d.name) ? "✓ applied" : "✓ already set"; ok += 1
+            }
         }
 
         for l in profile.links where pickedLinks.contains(l.id) {

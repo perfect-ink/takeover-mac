@@ -107,7 +107,9 @@ class Repository {
         defer { isLoading = false }
 
         do {
-            let loaded = try await RemoteCatalog.load(RepositoryResponse.self, sources: sources, cacheName: "apps-catalog", force: force)
+            let loaded = try await RemoteCatalog.load(
+                RepositoryResponse.self, sources: sources, cacheName: "apps-catalog",
+                bundled: Bundle.main.url(forResource: "apps-catalog", withExtension: "yaml"), force: force)
             response = RepositoryResponse(version: loaded.version, os_recipies: loaded.os_recipies, apps: Self.mergingVariants(loaded.apps))
         } catch let fetchError {
             error = fetchError

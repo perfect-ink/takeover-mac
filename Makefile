@@ -87,7 +87,7 @@ test: ## Run the unit-test suite.
 
 ##@ Production
 
-build: ## Build for production (Release), no install.
+build: catalog ## Build for production (Release), no install. Refreshes the offline catalogs first.
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration Release \
 		-derivedDataPath $(BUILD_DIR) -quiet build $(SIGN_FLAGS) $(XCODE_FLAGS)
 	@echo "==> $(RELEASE_APP)"
@@ -154,9 +154,19 @@ reset-tcc: ## Forget every TCC grant for the app (re-prompt from a clean slate).
 
 ##@ Maintenance
 
-catalog: ## Refresh the bundled offline Mac Defaults catalog from takeoverapp.site.
-	curl -fsSL https://takeoverapp.site/catalog/mac-defaults.yaml -o $(APP)/mac-defaults-catalog.yaml
-	@echo "Updated $(APP)/mac-defaults-catalog.yaml; commit it with the next release."
+# Recipes live only in takeover-site's public/catalog/*.yaml. The app fetches
+# them at runtime; the bundled copies are just the offline fallback, and every
+# production build refreshes them first (keeping the old copy if
+# takeoverapp.site can't be reached).
+CATALOG_URL := https://takeoverapp.site/catalog
+
+catalog: ## Refresh the bundled offline recipe catalogs from takeoverapp.site.
+	@mkdir -p $(BUILD_DIR)
+	@for pair in mac-defaults:mac-defaults-catalog apps:apps-catalog; do \
+		src=$${pair%%:*}; dst="$(APP)/$${pair##*:}.yaml"; tmp="$(BUILD_DIR)/download-$$src.yaml"; \
+		if curl -fsSL "$(CATALOG_URL)/$$src.yaml" -o "$$tmp"; then mv "$$tmp" "$$dst"; echo "Updated $$dst"; \
+		else echo "warning: couldn't fetch $$src.yaml; keeping the bundled copy"; fi; \
+	done
 
 clean: ## Clean existing builds.
 	rm -rf $(BUILD_DIR)

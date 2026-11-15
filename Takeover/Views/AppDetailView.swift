@@ -9,6 +9,7 @@ struct AppDetailView: View {
     let onDelete: (LinkItem) -> Void
     let onUninstall: (LinkItem) -> Void
     let onUninstallAll: ([LinkItem]) -> Void
+    var onResetLocations: () -> Void = {}
     var isIgnored = false
     var onToggleIgnore: () -> Void = {}
 
@@ -28,6 +29,11 @@ struct AppDetailView: View {
                     }
                     .buttonStyle(.plain)
                     .help("Add Location")
+                    Button(action: onResetLocations) {
+                        Image(systemName: "arrow.counterclockwise.circle")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Reset Locations: bring back removed catalog locations and move each into Takeover/\(RecipeInstaller.appFolder(group.id))/[location], keeping files and links")
                     Spacer()
                     Button(isIgnored ? "Stop Ignoring" : "Ignore", action: onToggleIgnore)
                         .help(isIgnored ? "Show this app in Sync Settings again" : "Hide this app from Sync Settings on every Mac")

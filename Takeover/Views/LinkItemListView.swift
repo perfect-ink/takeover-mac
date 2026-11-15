@@ -63,6 +63,7 @@ struct LinkItemListView: View {
                             onDelete: onDelete,
                             onUninstall: onUninstall,
                             onUninstallAll: { onUninstallAll(items: $0) },
+                            onResetLocations: { resetLocations(group.items, app: group.id) },
                             isIgnored: ignored.contains(group.id),
                             onToggleIgnore: { toggleIgnore(group) }
                         )
@@ -114,6 +115,11 @@ struct LinkItemListView: View {
             .controlSize(.small)
             .help(showAll ? "Hide apps that aren't on this Mac" : "Also show apps that aren't on this Mac (\(hiddenCount) hidden)")
             Spacer()
+            if linkItems.contains(where: RecipeInstaller.needsAppFolder) {
+                Button { resetLocations(linkItems) } label: { Image(systemName: "folder.badge.gearshape") }
+                    .buttonStyle(.borderless)
+                    .help("Move every location into Takeover/App/Location, keeping its files and links")
+            }
             if repository.isLoading { ProgressView().scaleEffect(0.5) }
             Button {
                 Task { await repository.load(force: true) }
@@ -263,21 +269,14 @@ struct LinkItemListView: View {
     }
 
     /// Gives locations from before app folders an "App/Location" To. Only ones
-    /// that aren't linked and have nothing at their old destination, so no
-    /// files or links are left behind.
+    /// that aren't linked and have nothing at their old destination; the
+    /// rest move with Reset Locations, which moves their files too.
     private func moveIntoAppFolders(_ all: [LinkItem], apps: [AppConfig]) -> Bool {
         var changed = false
         for item in all where RecipeInstaller.needsAppFolder(item)
             && LinkItemInstaller.status(item) == .notInstalled
             && !FileOps.exists(Config.expandedDestinationPath(for: item.to)) {
-            let from = PathUtility.expandTildeToRealHome(item.from)
-            let catalogName = apps.first { $0.name == RecipeInstaller.baseName(item.name) }?
-                .files.first { PathUtility.expandTildeToRealHome($0.path) == from }?.name
-            let name = item.label.isEmpty ? catalogName : item.label
-            let others = all.filter { $0 !== item }
-            item.to = item.from.isEmpty
-                ? RecipeInstaller.uniqueDestination(appName: item.name, location: name ?? "Location", from: "", others: others)
-                : RecipeInstaller.destination(appName: item.name, from: item.from, named: name, others: others)
+            item.to = defaultDestination(for: item, apps: apps, others: all.filter { $0 !== item })
             item.label = ""
             changed = true
         }
@@ -448,6 +447,45 @@ struct LinkItemListView: View {
         }
     }
 
+    /// Gives each location the destination it would get today (Takeover/App/
+    /// Location, named from the catalog), moving its synced files there and
+    /// relinking it when it's linked, so nothing is lost. With an app, its
+    /// removed catalog locations come back too.
+    private func resetLocations(_ items: [LinkItem], app: String? = nil) {
+        if let app { RemovedLocations.forget(app: app) }
+        let apps = repository.response?.apps ?? []
+        var failures: [String] = []
+        for item in items where !item.to.isEmpty && !RecipeInstaller.isAbsolute(item.to) {
+            let others = linkItems.filter { $0 !== item }
+            let to = defaultDestination(for: item, apps: apps, others: others)
+            guard to != item.to else { continue }
+            do {
+                try LinkItemInstaller.moveDestination(of: item, to: to)
+                item.to = to
+                item.label = ""
+            } catch {
+                failures.append("\(RecipeInstaller.displayName(of: item)): \(error.localizedDescription)")
+            }
+        }
+        try? modelContext.save()
+        seedFromCatalog()
+        Task { await saveToYAML() }
+        linkRefresh += 1
+        if !failures.isEmpty { errorMessage = failures.joined(separator: "\n") }
+    }
+
+    /// Takeover/App/Location for a location: the catalog's name for its path,
+    /// else its rename label, else its source's name.
+    private func defaultDestination(for item: LinkItem, apps: [AppConfig], others: [LinkItem]) -> String {
+        let from = PathUtility.expandTildeToRealHome(item.from)
+        let catalogName = apps.first { $0.name == RecipeInstaller.baseName(item.name) }?
+            .files.first { PathUtility.expandTildeToRealHome($0.path) == from }?.name
+        let name = catalogName ?? (item.label.isEmpty ? nil : item.label)
+        return item.from.isEmpty
+            ? RecipeInstaller.uniqueDestination(appName: item.name, location: name ?? "Location", from: "", others: others)
+            : RecipeInstaller.destination(appName: item.name, from: item.from, named: name, others: others)
+    }
+
     private func onDelete(linkItem: LinkItem) -> Void {
         RemovedLocations.add(app: RecipeInstaller.baseName(linkItem.name), path: linkItem.from)
         uninstall(linkItem, mode: .removeLink)
@@ -493,6 +531,12 @@ enum RemovedLocations {
 
     static func contains(app: String, path: String) -> Bool {
         (UserDefaults.standard.stringArray(forKey: key) ?? []).contains(id(app, path))
+    }
+
+    /// Lets an app's removed catalog locations be added again.
+    static func forget(app: String) {
+        let all = (UserDefaults.standard.stringArray(forKey: key) ?? []).filter { !$0.hasPrefix("\(app)|") }
+        UserDefaults.standard.set(all, forKey: key)
     }
 
     static func add(app: String, path: String) {

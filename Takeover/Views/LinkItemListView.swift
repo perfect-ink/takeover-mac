@@ -141,31 +141,55 @@ struct LinkItemListView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(selection: $selection) {
-                    ForEach(visibleGroups) { group in
-                        HStack {
-                            Text(group.id).fontWeight(.medium)
-                            Spacer()
-                            let _ = linkRefresh // re-read link status after installs
-                            LinkStatusIcon(status: group.status)
-                        }
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 4)
-                        .foregroundColor(group.installed ? .primary : .secondary)
-                        .opacity(group.installed ? 1 : 0.45)
-                        .contentShape(Rectangle())
-                        .tag(group.id)
-                        .contextMenu {
-                            ForEach(group.items) { item in
-                                Button("Install \(item.from)") { onRun(linkItem: item) }
-                            }
+                    let _ = linkRefresh // re-read link status after installs
+                    ForEach(sidebarSections, id: \.title) { section in
+                        Section(section.title) {
+                            ForEach(section.groups) { group in sidebarRow(group) }
                         }
                     }
                 }
-                .listStyle(.plain)
-                .environment(\.defaultMinListHeaderHeight, 0)
+                .listStyle(.sidebar)
                 .onAppear {
-                    if selection == nil { selection = visibleGroups.first?.id }
+                    if selection == nil { selection = sidebarSections.first?.groups.first?.id }
                 }
+            }
+        }
+    }
+
+    /// Installed (linked) first, then the rest on this Mac, then, with Show
+    /// All, apps that aren't on this Mac. Empty sections are left out.
+    private var sidebarSections: [SidebarSection] {
+        let visible = visibleGroups
+        let linked = visible.filter { $0.status != .notInstalled }
+        let onMac = visible.filter { $0.status == .notInstalled && $0.installed }
+        let others = visible.filter { $0.status == .notInstalled && !$0.installed }
+        return [
+            SidebarSection(title: "Installed", groups: linked),
+            SidebarSection(title: "On This Mac", groups: onMac),
+            SidebarSection(title: "Not on This Mac", groups: others),
+        ].filter { !$0.groups.isEmpty }
+    }
+
+    private struct SidebarSection {
+        let title: String
+        let groups: [AppGroup]
+    }
+
+    private func sidebarRow(_ group: AppGroup) -> some View {
+        HStack {
+            Text(group.id).fontWeight(.medium)
+            Spacer()
+            LinkStatusIcon(status: group.status)
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 4)
+        .foregroundColor(group.installed ? .primary : .secondary)
+        .opacity(group.installed ? 1 : 0.45)
+        .contentShape(Rectangle())
+        .tag(group.id)
+        .contextMenu {
+            ForEach(group.items) { item in
+                Button("Install \(item.from)") { onRun(linkItem: item) }
             }
         }
     }

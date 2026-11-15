@@ -71,7 +71,9 @@ asm.alpha_composite(door,(ox,0))
 hx=ox+ (149+12) - (191-140)
 # plates must reach onto the door: they are 107px long from barrel right edge; fine
 asm.alpha_composite(hinge,(hx,250))
-asm=asm.crop(asm.getbbox())
+bb=asm.getbbox(); asm=asm.crop(bb)
+# door centre inside the cropped assembly, used to centre the door (not the hinges)
+DOOR_C=(ox+CX-bb[0], CY-bb[1])
 vault=asm
 SS=2048; s=SS/1024
 
@@ -94,7 +96,7 @@ out=Image.new('RGBA',(SS,SS),(0,0,0,0)); out.paste(bg,(0,0),mask)
 # vault
 tw=body*0.90; sc=tw/vault.width
 v=vault.resize((round(vault.width*sc),round(vault.height*sc)),Image.LANCZOS)
-ox=round((SS-v.width)/2); oy=round((SS-v.height)/2+body*0.015)
+ox=round(SS/2-DOOR_C[0]*sc); oy=round(SS/2-DOOR_C[1]*sc)
 sh=Image.new('RGBA',(SS,SS),(0,0,0,0))
 a=v.split()[3].point(lambda p:p*0.55)
 blk=Image.new('RGBA',v.size,(2,12,40,255)); blk.putalpha(a)

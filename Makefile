@@ -16,6 +16,9 @@ CLI_SRC     := $(BUILD_DIR)/Build/Products/Release/$(CLI_NAME)
 DMG         := $(BUILD_DIR)/$(APP).dmg
 
 INSTALL_DST := /Applications/$(APP).app
+# macOS caches app icons by bundle path, so an in-place update keeps showing
+# the old icon. Touching the bundle and re-registering it refreshes the cache.
+LSREGISTER  := /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 PREFIX      ?= /usr/local
 CLI_DST     := $(PREFIX)/bin/$(CLI_NAME)
 
@@ -67,6 +70,7 @@ dev: ## Build a debug .app (replacing any previous one) and open it.
 	-killall $(APP) 2>/dev/null; true
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration Debug \
 		-derivedDataPath $(BUILD_DIR) -quiet build
+	@touch "$(DEV_APP)"; $(LSREGISTER) -f "$(DEV_APP)" 2>/dev/null; true
 	open "$(DEV_APP)"
 
 open: ## Open the already-built dev app (run `make dev` first if there isn't one).
@@ -98,6 +102,7 @@ install: build ## Build for production and install to /Applications.
 	@# --delete removes files that no longer exist in the fresh build.
 	mkdir -p "$(INSTALL_DST)"
 	rsync -a --delete "$(RELEASE_APP)/" "$(INSTALL_DST)/"
+	@touch "$(INSTALL_DST)"; $(LSREGISTER) -f "$(INSTALL_DST)" 2>/dev/null; true
 	@$(MAKE) --no-print-directory verify-sign
 	open "$(INSTALL_DST)"
 	@echo "$(APP).app installed to $(INSTALL_DST)"

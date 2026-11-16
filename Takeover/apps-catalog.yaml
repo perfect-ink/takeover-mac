@@ -270,12 +270,8 @@ apps:
         path: ~/Library/Application Support/Keyboard Maestro
 
   # Music and audio
-  - name: Audio Presets
-    files:
-      - name: Root Audio Presets
-        path: /Library/Audio/Presets
-      - name: User Audio Presets
-        path: ~/Library/Audio/Presets
+  # /Library/Audio/Presets and ~/Library/Audio/Presets stay real folders;
+  # each vendor's recipe below syncs its own subfolder of them.
   # Ableton's Application Support folder also holds each Live version's
   # Unlock folder (machine-bound authorization), so only its Library is synced.
   # ~/Library/Preferences/Ableton is a folder of Live's own .cfg files, not
@@ -315,9 +311,8 @@ apps:
       - name: User Blender Application Support
         path: ~/Library/Application Support/Blender
 
-  # Audio plug-in vendors. Each syncs the vendor's own folder; the Audio
-  # Presets entries above already hold every vendor's Audio/Presets folder,
-  # so a vendor here that lists one overlaps them.
+  # Audio plug-in vendors. Each syncs the vendor's own folders, including its
+  # subfolder of Audio/Presets.
   - name: Serum (Xfer Records)
     files:
       - name: Root Audio Presets

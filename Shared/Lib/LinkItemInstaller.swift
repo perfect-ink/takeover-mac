@@ -64,6 +64,7 @@ enum InstallConflictChoice {
 enum LinkStatus {
     case installed          // linked to this item's destination
     case differentLocation  // a link exists but points somewhere else
+    case broken             // a link exists but what it points to is gone
     case notInstalled
 }
 
@@ -251,7 +252,10 @@ struct LinkItemInstaller {
         if isLinked(linkItem) { return .installed }
         guard !linkItem.from.isEmpty else { return .notInstalled }
         let fromPath = PathUtility.expandTildeToRealHome(linkItem.from)
-        return FileOps.isSymlink(fromPath) ? .differentLocation : .notInstalled
+        guard FileOps.isSymlink(fromPath) else { return .notInstalled }
+        // A link whose target is gone, e.g. after another Mac sharing the
+        // settings folder moved it. Install relinks it to this item's destination.
+        return FileOps.exists(fromPath) ? .differentLocation : .broken
     }
 
     /// True when "from" is a symlink that resolves to this item's destination,

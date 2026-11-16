@@ -20,6 +20,7 @@ struct AppGroup: Identifiable {
     /// Installed only when every location is; not installed only when none is.
     var status: LinkStatus {
         let all = items.map { LinkItemInstaller.status($0) }
+        if all.contains(.broken) { return .broken }
         if all.isEmpty || all.allSatisfy({ $0 == .notInstalled }) { return .notInstalled }
         if all.allSatisfy({ $0 == .installed }) { return .installed }
         return .differentLocation

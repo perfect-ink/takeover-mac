@@ -151,14 +151,17 @@ struct LinkItemDetailView: View {
                     if let target = existingLinkTarget {
                         let matches = (target as NSString).standardizingPath
                             == (Config.expandedDestinationPath(for: linkItem.to) as NSString).standardizingPath
+                        let gone = !FileOps.exists(PathUtility.expandTildeToRealHome(linkItem.from))
                         Label {
-                            Text("Already a link, pointing to \(target)")
+                            Text(gone
+                                 ? "Broken link: points to \(target), which no longer exists. Install relinks it to To."
+                                 : "Already a link, pointing to \(target)")
                                 .textSelection(.enabled)
                         } icon: {
                             Image(systemName: matches ? "link" : "exclamationmark.triangle.fill")
                         }
                         .font(.caption)
-                        .foregroundColor(matches ? .secondary : .orange)
+                        .foregroundColor(gone ? .red : (matches ? .secondary : .orange))
                     }
 
                     if let warning = missingSourceWarning {
@@ -533,6 +536,9 @@ struct LinkStatusIcon: View {
         case .differentLocation:
             Image(systemName: "questionmark.circle.fill").foregroundColor(.orange)
                 .help("Installed at a different location")
+        case .broken:
+            Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.red)
+                .help("Broken link: what it points to is gone. Install relinks it.")
         case .notInstalled:
             Image(systemName: "circle.dashed").foregroundColor(.secondary)
                 .help("Not installed")

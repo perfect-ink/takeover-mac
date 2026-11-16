@@ -44,12 +44,9 @@ apps:
     files:
       - name: User Application Support
         path: ~/Library/Application Support/com.tinyapp.TablePlus
-  - name: Audio Plug-Ins
-    files:
-      - name: Root Audio Plug-Ins
-        path: /Library/Audio/Plug-Ins
-      - name: User Audio Plug-Ins
-        path: ~/Library/Audio/Plug-Ins
+  # Audio plug-ins (/Library/Audio/Plug-Ins, ~/Library/Audio/Plug-Ins) aren't
+  # synced: they're app binaries that their installers write, which breaks
+  # when the folder is a link (Alex, 2026-11-16).
   - name: Native Instruments
     files:
       - name: Root Battery 4

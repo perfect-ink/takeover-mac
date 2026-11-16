@@ -18,5 +18,6 @@ This matters for the Native Instruments recipe, which (since 2026-11-16) syncs e
 
 ## History
 
+- 2026-11-16: Audio Plug-Ins dropped from the catalog (plug-in installers break through a link; the bundles are binaries their installers restore).
 - 2026-11-16: Audio Presets dropped as a whole-folder location (Alex: "Audio Presets is another one that cannot be done").
 - Implemented 2026-11-16, when Alex chose to sync Native Instruments' product folders one by one. Not compiled locally (Linux session); CI builds and tests it.

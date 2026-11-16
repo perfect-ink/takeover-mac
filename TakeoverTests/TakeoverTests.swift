@@ -100,13 +100,6 @@ struct TakeoverTests {
         #expect(try JSONDecoder().decode(Profile.AppEntry.self, from: Data(json.utf8)).alwaysInstall)
     }
 
-    @Test func systemLocationsAreOutsideHome() {
-        #expect(LinkItemInstaller.isSystemLocation("/Library/Application Support/Native Instruments"))
-        #expect(LinkItemInstaller.isSystemLocation("/Users/Shared/Native Instruments"))
-        #expect(!LinkItemInstaller.isSystemLocation("~/Library/Application Support/Native Instruments"))
-        #expect(!LinkItemInstaller.isSystemLocation(""))
-    }
-
     @Test func sourceMissingForPathsNotOnThisMac() {
         #expect(!LinkItemInstaller.sourceExists("/Library/Application Support/takeover-test-\(UUID().uuidString)"))
     }

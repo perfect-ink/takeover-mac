@@ -278,7 +278,7 @@ struct TakeoverApp: App {
                 let to = expandTilde(config.to)
                 // If that fails, this Mac keeps its working To rather than
                 // stranding its link.
-                if item.to != to { try? LinkItemInstaller.changeDestination(of: item, to: to) }
+                if item.to != to { try? LinkItemInstaller.changeDestination(of: item, to: to, adoptExisting: true) }
                 item.defaults = config.defaults ?? ""
             } else {
                 context.delete(item)

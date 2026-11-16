@@ -339,7 +339,7 @@ struct LinkItemListView: View {
         var failures: [String] = []
         for move in moves {
             do {
-                try LinkItemInstaller.changeDestination(of: move.item, to: move.to)
+                try LinkItemInstaller.changeDestination(of: move.item, to: move.to, adoptExisting: true)
                 CatalogSeen.record(move.item, move.to)
             } catch {
                 failures.append("\(move.item.to): \(error.localizedDescription)")
@@ -570,7 +570,7 @@ struct LinkItemListView: View {
             let to = defaultDestination(for: item, apps: apps, others: others)
             guard to != item.to else { continue }
             do {
-                try LinkItemInstaller.changeDestination(of: item, to: to)
+                try LinkItemInstaller.changeDestination(of: item, to: to, adoptExisting: true)
                 CatalogSeen.record(item, to)
             } catch {
                 failures.append("\(RecipeInstaller.displayName(of: item)): \(error.localizedDescription)")

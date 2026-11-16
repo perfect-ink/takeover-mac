@@ -221,11 +221,14 @@ struct LinkItemInstaller {
     /// old destination to `newTo`, points the source's link at the new place
     /// when it pointed at the old one, then sets `to` (and clears the label).
     /// If relinking fails the files are moved back, so a link never ends up
-    /// pointing at a folder that's gone. Throws without changing anything when
-    /// something is already at `newTo` and there are files to move.
+    /// pointing at a folder that's gone. When something is already at `newTo`
+    /// and there are files to move, it throws without changing anything,
+    /// unless `adoptExisting`: then the folder already at `newTo` wins (another
+    /// Mac sharing the settings folder made the same move first) and the old
+    /// destination is set aside with a timestamp, never deleted.
     @MainActor
-    static func changeDestination(of linkItem: LinkItem, to newTo: String) throws {
-        try moveDestination(of: linkItem, to: newTo)
+    static func changeDestination(of linkItem: LinkItem, to newTo: String, adoptExisting: Bool = false) throws {
+        try moveDestination(of: linkItem, to: newTo, adoptExisting: adoptExisting)
         // A local-store location's backup in the settings folder moves too.
         moveSyncedCopy(of: linkItem, to: newTo)
         linkItem.to = newTo
@@ -233,7 +236,7 @@ struct LinkItemInstaller {
     }
 
     @MainActor
-    static func moveDestination(of linkItem: LinkItem, to newTo: String) throws {
+    static func moveDestination(of linkItem: LinkItem, to newTo: String, adoptExisting: Bool = false) throws {
         guard !linkItem.to.isEmpty, !newTo.isEmpty else { return }
         let oldPath = Config.linkTargetPath(from: linkItem.from, to: linkItem.to)
         let newPath = Config.linkTargetPath(from: linkItem.from, to: newTo)
@@ -245,18 +248,50 @@ struct LinkItemInstaller {
         let pointsAtOld = sourceIsLink && linkTarget(source).map { samePath($0, oldPath) || isInside($0, oldPath) } == true
         let danglingBefore = sourceIsLink && !FileOps.exists(source)
 
+        // A local-store location whose new synced copy is already in the
+        // settings folder: that copy is what's at the new place.
+        let newSynced = Config.usesLocalStore(from: linkItem.from) ? Config.expandedDestinationPath(for: newTo) : newPath
+        let existingAtNew = FileOps.exists(newPath) || FileOps.exists(newSynced)
+
         var moved = false
-        if FileOps.exists(oldPath) || FileOps.isSymlink(oldPath) {
-            // FileOps.move replaces what's there; never clobber another folder.
-            guard !FileOps.exists(newPath) else {
-                throw LinkInstallError.moveToBackupFailed("\(newPath) already exists.")
-            }
-            do {
-                try FileOps.makeDirectory((newPath as NSString).deletingLastPathComponent, allowPrivileged: true)
-                try FileOps.move(from: oldPath, to: newPath, allowPrivileged: true)
-                moved = true
-            } catch {
-                throw LinkInstallError.moveToBackupFailed(error.localizedDescription)
+        var setAside: String?
+        if isInside(newPath, oldPath), existingAtNew, adoptExisting {
+            // The new place is inside the old one and already there (another
+            // Mac moved the files down a level): nothing to move, just relink.
+            // Whatever else is in the old folder stays where it is.
+        } else if FileOps.exists(oldPath) || FileOps.isSymlink(oldPath) {
+            if existingAtNew {
+                // FileOps.move replaces what's there; never clobber another folder.
+                guard adoptExisting else {
+                    throw LinkInstallError.moveToBackupFailed("\(FileOps.exists(newPath) ? newPath : newSynced) already exists.")
+                }
+                // Use what's already at the new place; keep this Mac's old
+                // copy beside it rather than deleting it.
+                let archived = "\(oldPath)-old-\(timestamp())"
+                do {
+                    try FileOps.move(from: oldPath, to: archived, allowPrivileged: true)
+                    setAside = archived
+                    print("Using the existing \(newPath); set \(oldPath) aside at \(archived)")
+                    try LocalStoreBackup.seedIfNeeded(from: linkItem.from, to: newTo)
+                } catch {
+                    if let archived = setAside { try? FileOps.move(from: archived, to: oldPath, allowPrivileged: true) }
+                    throw LinkInstallError.moveToBackupFailed(error.localizedDescription)
+                }
+            } else {
+                do {
+                    // Moving a folder into a folder inside itself takes two
+                    // steps: out of the way first, then into place.
+                    var from = oldPath
+                    if isInside(newPath, oldPath) {
+                        from = "\(oldPath)-moving-\(timestamp())"
+                        try FileOps.move(from: oldPath, to: from, allowPrivileged: true)
+                    }
+                    try FileOps.makeDirectory((newPath as NSString).deletingLastPathComponent, allowPrivileged: true)
+                    try FileOps.move(from: from, to: newPath, allowPrivileged: true)
+                    moved = true
+                } catch {
+                    throw LinkInstallError.moveToBackupFailed(error.localizedDescription)
+                }
             }
         }
 
@@ -264,6 +299,8 @@ struct LinkItemInstaller {
         // just broke it (it pointed somewhere inside what moved).
         let brokenByMove = sourceIsLink && !danglingBefore && !FileOps.exists(source)
         guard pointsAtOld || brokenByMove else { return }
+        // A local-store location starts from its synced copy, if there is one.
+        try? LocalStoreBackup.seedIfNeeded(from: linkItem.from, to: newTo)
         if !FileOps.exists(newPath) {
             // Nothing to point at (the old destination was already missing):
             // make the folder so the link isn't left dangling.
@@ -274,9 +311,26 @@ struct LinkItemInstaller {
             try FileOps.symlink(at: source, to: newPath, allowPrivileged: true)
             try verifyLink(originalPath: source, backupPath: newPath)
         } catch {
-            if moved {
+            if moved || setAside != nil {
                 // Put the files back and the old link with them.
-                try? FileOps.move(from: newPath, to: oldPath, allowPrivileged: true)
+                if let archived = setAside {
+                    try? FileOps.move(from: archived, to: oldPath, allowPrivileged: true)
+                } else if isInside(newPath, oldPath) {
+                    // FileOps.move would replace the old folder, which now
+                    // holds the files: lift them out, drop the emptied parents
+                    // (rmdir never removes a folder with anything in it), then
+                    // put them back.
+                    let lifted = "\(oldPath)-moving-\(timestamp())"
+                    if (try? FileOps.move(from: newPath, to: lifted, allowPrivileged: true)) != nil {
+                        var dir = (newPath as NSString).deletingLastPathComponent
+                        while isInside(dir, oldPath) || samePath(dir, oldPath), rmdir(dir) == 0 {
+                            dir = (dir as NSString).deletingLastPathComponent
+                        }
+                        if !FileOps.exists(oldPath) { try? FileOps.move(from: lifted, to: oldPath, allowPrivileged: true) }
+                    }
+                } else {
+                    try? FileOps.move(from: newPath, to: oldPath, allowPrivileged: true)
+                }
                 if !FileOps.isSymlink(source) { try? FileOps.symlink(at: source, to: oldPath, allowPrivileged: true) }
             }
             throw LinkInstallError.symlinkFailed(error.localizedDescription)

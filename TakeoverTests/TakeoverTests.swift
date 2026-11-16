@@ -78,6 +78,63 @@ struct TakeoverTests {
         #expect(try String(contentsOfFile: source + "/prefs.txt", encoding: .utf8) == "kontakt")
     }
 
+    /// A catalog rename another Mac already made: the folder at the new place
+    /// is used, and this Mac's old copy is set aside, not deleted. A plain To
+    /// change still refuses to touch an existing folder.
+    @MainActor @Test func catalogMoveAdoptsAnExistingDestination() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+        defer { try? fm.removeItem(atPath: root) }
+        let old = root + "/Takeover/SSH/ssh", new = root + "/Takeover/SSH/User SSH"
+        try fm.createDirectory(atPath: old, withIntermediateDirectories: true)
+        try fm.createDirectory(atPath: new, withIntermediateDirectories: true)
+        try "old".write(toFile: old + "/config", atomically: true, encoding: .utf8)
+        try "synced".write(toFile: new + "/config", atomically: true, encoding: .utf8)
+        let source = root + "/.ssh"
+        try fm.createSymbolicLink(atPath: source, withDestinationPath: old)
+        let item = LinkItem(name: "SSH", from: source, to: old)
+
+        #expect(throws: LinkInstallError.self) {
+            try LinkItemInstaller.changeDestination(of: item, to: new)
+        }
+        #expect(item.to == old)
+
+        try LinkItemInstaller.changeDestination(of: item, to: new, adoptExisting: true)
+
+        #expect(item.to == new)
+        #expect(LinkItemInstaller.isLinked(item))
+        #expect(try String(contentsOfFile: source + "/config", encoding: .utf8) == "synced")
+        let aside = try fm.contentsOfDirectory(atPath: root + "/Takeover/SSH").filter { $0.hasPrefix("ssh-old-") }
+        #expect(aside.count == 1)
+        #expect(try String(contentsOfFile: root + "/Takeover/SSH/" + aside[0] + "/config", encoding: .utf8) == "old")
+    }
+
+    /// Moving a location down into a folder inside its old one: two-step move
+    /// when nothing's there yet, and just a relink when another Mac already did it.
+    @MainActor @Test func catalogMoveIntoASubfolderOfTheOldDestination() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+        defer { try? fm.removeItem(atPath: root) }
+        let old = root + "/Takeover/SSH", new = root + "/Takeover/SSH/User SSH"
+        try fm.createDirectory(atPath: old, withIntermediateDirectories: true)
+        try "mine".write(toFile: old + "/config", atomically: true, encoding: .utf8)
+        let source = root + "/.ssh"
+        try fm.createSymbolicLink(atPath: source, withDestinationPath: old)
+        let item = LinkItem(name: "SSH", from: source, to: old)
+
+        try LinkItemInstaller.changeDestination(of: item, to: new)
+        #expect(LinkItemInstaller.isLinked(item))
+        #expect(try String(contentsOfFile: source + "/config", encoding: .utf8) == "mine")
+
+        // Another Mac's link still points at the old, now-parent folder.
+        try fm.removeItem(atPath: source)
+        try fm.createSymbolicLink(atPath: source, withDestinationPath: old)
+        item.to = old
+        try LinkItemInstaller.changeDestination(of: item, to: new, adoptExisting: true)
+        #expect(LinkItemInstaller.isLinked(item))
+        #expect(try String(contentsOfFile: source + "/config", encoding: .utf8) == "mine")
+    }
+
     /// A link already dangling at the old destination is pointed at the new one.
     @MainActor @Test func changingToRepairsALinkToAMissingDestination() throws {
         let fm = FileManager.default

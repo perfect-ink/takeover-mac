@@ -15,6 +15,10 @@
 # it is its own location, leaving out NTK and Service Center (licensing and
 # activation, which NI's installers and Native Access manage).
 #
+# A path may use `*` for one path component's varying part, e.g. an app's
+# version in its name; the Mac app adds one location per match on that Mac
+# and puts the matched text where the location's name has its `*`.
+#
 # `os_recipies` keeps the old api/repository.json spelling; the Mac app
 # decodes that key.
 version: 1
@@ -273,6 +277,10 @@ apps:
   # Unlock folder (machine-bound authorization), so only its Library is synced.
   # ~/Library/Preferences/Ableton is a folder of Live's own .cfg files, not
   # plists, so it symlinks fine.
+  # Themes live inside each Live app (Live 10 and later: Themes; Live 9:
+  # Skins). The `*` matches every installed version and edition, and the Mac
+  # app adds one location per match, putting the matched text where the
+  # name has its `*` ("Root Ableton Live 12 Suite Themes").
   - name: Ableton Live
     files:
       - name: User Ableton Live Music
@@ -281,6 +289,10 @@ apps:
         path: ~/Library/Application Support/Ableton/Library
       - name: User Ableton Live Preferences
         path: ~/Library/Preferences/Ableton
+      - name: Root Ableton Live * Themes
+        path: /Applications/Ableton Live *.app/Contents/App-Resources/Themes
+      - name: Root Ableton Live * Skins
+        path: /Applications/Ableton Live *.app/Contents/App-Resources/Skins
   - name: Logic Pro
     files:
       - name: Audio Music Apps

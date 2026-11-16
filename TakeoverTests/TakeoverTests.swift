@@ -138,6 +138,25 @@ struct TakeoverTests {
         #expect(files.map(\.name) == ["Documents", nil])
     }
 
+    @Test func wildcardLocationsExpandPerMatch() {
+        let app = AppConfig(name: "Ableton Live", files: [
+            FileConfig(path: "~/Music/Ableton", name: "User Ableton Live Music"),
+            FileConfig(path: "/Applications/Ableton Live *.app/Contents/App-Resources/Themes", name: "Root Ableton Live * Themes"),
+            FileConfig(path: "/Applications/Ableton Live *.app/Contents/App-Resources/Skins", name: "Root Ableton Live * Skins"),
+        ], defaults: nil)
+        let installed = [
+            "/Applications/Ableton Live 12 Suite.app/Contents/App-Resources/Themes",
+            "/Applications/Ableton Live 10 Standard.app/Contents/App-Resources/Themes",
+        ]
+        let expanded = Repository.expandingWildcards([app]) { pattern in
+            pattern.hasSuffix("Themes") ? installed : []
+        }[0].files
+        #expect(expanded.map(\.path) == ["~/Music/Ableton"] + installed.sorted())
+        #expect(expanded.map(\.name) == [
+            "User Ableton Live Music", "Root Ableton Live 10 Standard Themes", "Root Ableton Live 12 Suite Themes",
+        ])
+    }
+
     @Test func distinguishingPartIsWhereThePathsDiffer() {
         #expect(RecipeInstaller.distinguishingPart(of: "~/Library/Audio/Plug-Ins", from: "/Library/Audio/Plug-Ins") == "User")
         #expect(RecipeInstaller.distinguishingPart(of: "/Library/Audio/Plug-Ins", from: "~/Library/Audio/Plug-Ins") == "System")

@@ -17,3 +17,4 @@ One file per feature; see docs/rules/feature-docs.md.
 - [broken_links.md](broken_links.md): links whose target is gone show red; Install relinks them.
 - [local_store_for_system_locations.md](local_store_for_system_locations.md): /Library locations link into /Users/Shared/Takeover, backed up to the settings folder, because installers can't write into iCloud Drive through a link.
 - [nested_locations.md](nested_locations.md): Install refuses a location inside another linked one; Native Instruments product folders sync one by one.
+- [wildcard_locations.md](wildcard_locations.md): `*` in a catalog path, one location per match (every Ableton Live version's themes).

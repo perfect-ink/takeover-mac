@@ -5,6 +5,7 @@
 //  Created by Alex Vaos on 11/7/25.
 //
 
+import Darwin
 import Foundation
 import Observation
 
@@ -111,6 +112,52 @@ class Repository {
         return order.compactMap { merged[$0] }
     }
 
+    /// Turns each location whose path has a `*` (e.g. every installed Ableton
+    /// Live version's Themes folder) into one location per match on this Mac,
+    /// with each `*` in its name replaced by the matching text. A pattern with
+    /// no match is left out, since there's nothing to link here. `matches`
+    /// returns the existing paths for an expanded (no tilde) pattern.
+    static func expandingWildcards(_ apps: [AppConfig], matches: (String) -> [String] = Repository.globPaths) -> [AppConfig] {
+        apps.map { app in
+            var files: [FileConfig] = []
+            for file in app.files {
+                guard file.path.contains("*") else { files.append(file); continue }
+                for match in matches(PathUtility.expandTildeToRealHome(file.path)).sorted() {
+                    let path = file.path.hasPrefix("~") ? PathUtility.abbreviateRealHome(match) : match
+                    guard !files.contains(where: { $0.path == path }) else { continue }
+                    files.append(FileConfig(path: path, name: file.name.map { wildcardName($0, pattern: file.path, path: path) }))
+                }
+            }
+            return AppConfig(name: app.name, files: files, defaults: app.defaults)
+        }
+    }
+
+    /// "Root Ableton Live * Themes" for "/Applications/Ableton Live 12
+    /// Suite.app/..." matched by "/Applications/Ableton Live *.app/..." is
+    /// "Root Ableton Live 12 Suite Themes": each `*` in the name takes the
+    /// text the path's `*`s matched, in order.
+    static func wildcardName(_ name: String, pattern: String, path: String) -> String {
+        let regex = "^" + pattern.components(separatedBy: "*")
+            .map { NSRegularExpression.escapedPattern(for: $0) }
+            .joined(separator: "([^/]*)") + "$"
+        guard let re = try? NSRegularExpression(pattern: regex),
+              let m = re.firstMatch(in: path, range: NSRange(path.startIndex..., in: path))
+        else { return name.replacingOccurrences(of: "*", with: "").trimmingCharacters(in: .whitespaces) }
+        let captures = (1..<m.numberOfRanges).compactMap { Range(m.range(at: $0), in: path).map { String(path[$0]) } }
+        var parts = name.components(separatedBy: "*")
+        var result = parts.removeFirst()
+        for (i, part) in parts.enumerated() { result += (i < captures.count ? captures[i] : "") + part }
+        return result
+    }
+
+    /// Existing paths matching a shell-style pattern (glob(3)).
+    static func globPaths(_ pattern: String) -> [String] {
+        var g = glob_t()
+        defer { globfree(&g) }
+        guard glob(pattern, 0, nil, &g) == 0 else { return [] }
+        return (0..<Int(g.gl_pathc)).compactMap { g.gl_pathv[$0].map { String(cString: $0) } }
+    }
+
     /// The fetched catalog plus any app only the bundled copy has, so a server
     /// that's behind the app's build never hides recipes the build ships with.
     static func addingBundled(to apps: [AppConfig]) -> [AppConfig] {
@@ -132,7 +179,7 @@ class Repository {
                 RepositoryResponse.self, sources: sources, cacheName: "apps-catalog",
                 bundled: Bundle.main.url(forResource: "apps-catalog", withExtension: "yaml"), force: force)
             let apps = Self.addingBundled(to: loaded.apps)
-            response = RepositoryResponse(version: loaded.version, os_recipies: loaded.os_recipies, apps: Self.mergingVariants(apps))
+            response = RepositoryResponse(version: loaded.version, os_recipies: loaded.os_recipies, apps: Self.expandingWildcards(Self.mergingVariants(apps)))
         } catch let fetchError {
             error = fetchError
         }

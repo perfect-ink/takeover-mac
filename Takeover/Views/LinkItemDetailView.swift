@@ -150,7 +150,7 @@ struct LinkItemDetailView: View {
 
                     if let target = existingLinkTarget {
                         let matches = (target as NSString).standardizingPath
-                            == (Config.expandedDestinationPath(for: linkItem.to) as NSString).standardizingPath
+                            == (LinkItemInstaller.target(of: linkItem) as NSString).standardizingPath
                         let gone = !FileOps.exists(PathUtility.expandTildeToRealHome(linkItem.from))
                         Label {
                             Text(gone
@@ -218,6 +218,13 @@ struct LinkItemDetailView: View {
                                 }
                             }
                         }
+                    }
+
+                    if let localTarget {
+                        Text("Linked through \(localTarget), because macOS doesn't let installers write into iCloud Drive or Dropbox through a link. Takeover backs it up to To.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .textSelection(.enabled)
                     }
                 }
                 .card(enabled: !embedded)
@@ -411,6 +418,13 @@ struct LinkItemDetailView: View {
     }
 
     private var symlinkIsValid: Bool { LinkItemInstaller.isLinked(linkItem) }
+
+    /// The local folder a /Library location links into, when it isn't To itself.
+    private var localTarget: String? {
+        guard !linkItem.to.isEmpty else { return nil }
+        let target = LinkItemInstaller.target(of: linkItem)
+        return target == Config.expandedDestinationPath(for: linkItem.to) ? nil : target
+    }
 
     private var displayToPath: String {
         guard !linkItem.to.isEmpty else {

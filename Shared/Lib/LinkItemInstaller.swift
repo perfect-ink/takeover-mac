@@ -81,8 +81,16 @@ struct LinkItemInstaller {
         // Already linked to this destination: nothing to do.
         if isLinked(linkItem) { return }
 
-        let backupPath = Config.expandedDestinationPath(for: linkItem.to)
+        let backupPath = target(of: linkItem)
         let originalPath = PathUtility.expandTildeToRealHome(linkItem.from)
+
+        // A /Library location on a Mac without its local folder yet: start
+        // from the synced copy, as a home-folder location would.
+        do {
+            try LocalStoreBackup.seedIfNeeded(from: linkItem.from, to: linkItem.to)
+        } catch {
+            throw LinkInstallError.moveToBackupFailed(error.localizedDescription)
+        }
 
         let originalExists = FileOps.exists(originalPath)
         let originalIsSymlink = FileOps.isSymlink(originalPath)
@@ -152,6 +160,7 @@ struct LinkItemInstaller {
         print("Linked \(originalPath) -> \(backupPath)")
 
         try verifyLink(originalPath: originalPath, backupPath: backupPath)
+        backUpInBackground(linkItem)
 
         if !linkItem.defaults.isEmpty {
             let result = Shell.runTrusted(linkItem.defaults)
@@ -174,7 +183,7 @@ struct LinkItemInstaller {
             print("Nothing to uninstall — \(originalPath) is not a symlink")
             return
         }
-        let backupPath = Config.expandedDestinationPath(for: linkItem.to)
+        let backupPath = target(of: linkItem)
 
         do {
             try FileOps.remove(originalPath, allowPrivileged: true)
@@ -207,6 +216,8 @@ struct LinkItemInstaller {
     @MainActor
     static func changeDestination(of linkItem: LinkItem, to newTo: String) throws {
         try moveDestination(of: linkItem, to: newTo)
+        // A local-store location's backup in the settings folder moves too.
+        moveSyncedCopy(of: linkItem, to: newTo)
         linkItem.to = newTo
         linkItem.label = ""
     }
@@ -214,8 +225,8 @@ struct LinkItemInstaller {
     @MainActor
     static func moveDestination(of linkItem: LinkItem, to newTo: String) throws {
         guard !linkItem.to.isEmpty, !newTo.isEmpty else { return }
-        let oldPath = Config.expandedDestinationPath(for: linkItem.to)
-        let newPath = Config.expandedDestinationPath(for: newTo)
+        let oldPath = Config.linkTargetPath(from: linkItem.from, to: linkItem.to)
+        let newPath = Config.linkTargetPath(from: linkItem.from, to: newTo)
         guard !samePath(oldPath, newPath) else { return }
         let source = linkItem.from.isEmpty ? "" : PathUtility.expandTildeToRealHome(linkItem.from)
         let sourceIsLink = !source.isEmpty && FileOps.isSymlink(source)
@@ -262,6 +273,32 @@ struct LinkItemInstaller {
         }
     }
 
+    /// What this item's link points to (see `Config.linkTargetPath`).
+    static func target(of linkItem: LinkItem) -> String {
+        Config.linkTargetPath(from: linkItem.from, to: linkItem.to)
+    }
+
+    /// Backs a local-store location up into the settings folder off the main
+    /// thread (it can be gigabytes).
+    static func backUpInBackground(_ linkItem: LinkItem) {
+        let from = linkItem.from, to = linkItem.to
+        guard Config.usesLocalStore(from: from) else { return }
+        DispatchQueue.global(qos: .utility).async {
+            if let error = LocalStoreBackup.backUp(from: from, to: to) { print(error) }
+        }
+    }
+
+    /// Moves a local-store location's synced copy along with a To change,
+    /// unless something is already at the new place.
+    private static func moveSyncedCopy(of linkItem: LinkItem, to newTo: String) {
+        guard Config.usesLocalStore(from: linkItem.from) else { return }
+        let oldSynced = Config.expandedDestinationPath(for: linkItem.to)
+        let newSynced = Config.expandedDestinationPath(for: newTo)
+        guard !samePath(oldSynced, newSynced), FileOps.exists(oldSynced), !FileOps.exists(newSynced) else { return }
+        try? FileOps.makeDirectory((newSynced as NSString).deletingLastPathComponent)
+        try? FileOps.move(from: oldSynced, to: newSynced)
+    }
+
     /// Where the link at `path` points, made absolute.
     static func linkTarget(_ path: String) -> String? {
         guard let raw = try? FileManager.default.destinationOfSymbolicLink(atPath: path) else { return nil }
@@ -287,9 +324,13 @@ struct LinkItemInstaller {
     static func hasConflict(_ linkItem: LinkItem) -> Bool {
         guard !linkItem.from.isEmpty, !linkItem.to.isEmpty, !isLinked(linkItem) else { return false }
         let original = PathUtility.expandTildeToRealHome(linkItem.from)
-        let backup = Config.expandedDestinationPath(for: linkItem.to)
-        return FileOps.exists(original) && !FileOps.isSymlink(original)
-            && FileOps.exists(backup) && !FileOps.isSymlink(backup)
+        let backup = target(of: linkItem)
+        let synced = Config.expandedDestinationPath(for: linkItem.to)
+        // A local-store location gets its local folder from the synced copy,
+        // so either one counts.
+        let backupExists = (FileOps.exists(backup) && !FileOps.isSymlink(backup))
+            || (FileOps.exists(synced) && !FileOps.isSymlink(synced))
+        return FileOps.exists(original) && !FileOps.isSymlink(original) && backupExists
     }
 
     // MARK: - Helpers
@@ -318,7 +359,7 @@ struct LinkItemInstaller {
         guard !linkItem.from.isEmpty, !linkItem.to.isEmpty else { return false }
         let fromPath = PathUtility.expandTildeToRealHome(linkItem.from)
         guard FileOps.isSymlink(fromPath), let target = linkTarget(fromPath) else { return false }
-        return samePath(target, Config.expandedDestinationPath(for: linkItem.to))
+        return samePath(target, Self.target(of: linkItem))
     }
 
     private static func normalized(_ path: String) -> String {

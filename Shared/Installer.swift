@@ -49,10 +49,16 @@ struct Installer {
 
     static func install(_ link: LinkConfig) -> Result<Void, InstallError> {
         let fromPath = PathUtility.expandTildeToRealHome(link.from)
-        let toPath = Config.expandedDestinationPath(for: link.to)
+        // /Library locations link into a local folder (see Config.linkTargetPath).
+        let toPath = Config.linkTargetPath(from: link.from, to: link.to)
 
         if isSymlink(atPath: fromPath) {
             return .failure(.alreadyInstalled)
+        }
+        do {
+            try LocalStoreBackup.seedIfNeeded(from: link.from, to: link.to)
+        } catch {
+            return .failure(.moveFailed)
         }
 
         let fm = FileManager.default
@@ -90,6 +96,8 @@ struct Installer {
             : "ln -s '\(escapedTo)' '\(escapedFrom)'"
         let code = run(linkCmd)
         if code != 0 { return .failure(.symlinkFailed) }
+
+        LocalStoreBackup.backUp(from: link.from, to: link.to)
 
         // Run defaults command if present
         if let defaults = link.defaults, !defaults.isEmpty {

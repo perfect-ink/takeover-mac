@@ -376,6 +376,7 @@ struct LinkItemListView: View {
         let source = PathUtility.expandTildeToRealHome(item.from)
         return (item.from.isEmpty || !FileOps.isSymlink(source))
             && !FileOps.exists(Config.expandedDestinationPath(for: item.to))
+            && !FileOps.exists(LinkItemInstaller.target(of: item))
     }
 
     /// Adds a sync setting of the user's own: pick a folder or file, and it's

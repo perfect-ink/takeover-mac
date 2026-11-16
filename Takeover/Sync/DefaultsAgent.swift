@@ -10,7 +10,9 @@ import os
 ///    and applies the ones that differ,
 /// 2. watches `mac-defaults.yaml` in the chosen settings folder (and the
 ///    storage choice itself) and applies changes synced from another Mac,
-/// 3. with Takeover Cloud, pulls a newer profile from the account every few
+/// 3. backs up /Library locations' local folders into the settings folder
+///    (see LocalStoreSync) while the app is closed,
+/// 4. with Takeover Cloud, pulls a newer profile from the account every few
 ///    minutes while the app is closed (the open app does its own pulls),
 ///    which rewrites the file and so gets applied by (2).
 @MainActor
@@ -39,6 +41,9 @@ final class DefaultsAgent {
         }
         watch()
         MacDefaultsEnforcer.enforceFile(trigger: .startup)
+
+        // While the app is closed, keep /Library locations backed up too.
+        Task { await LocalStoreSync.keepBackedUp { !Self.appIsOpen } }
 
         while !Task.isCancelled {
             await pullFromCloudIfNeeded()

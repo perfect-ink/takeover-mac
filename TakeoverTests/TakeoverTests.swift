@@ -94,6 +94,23 @@ struct TakeoverTests {
         #expect(LinkItemInstaller.status(item) == .installed)
     }
 
+    /// /Library locations link into the local store, since macOS won't let
+    /// installers write into iCloud Drive through a link; home ones don't.
+    @Test func systemLocationsLinkIntoTheLocalStore() {
+        #expect(Config.usesLocalStore(from: "/Library/Application Support/Native Instruments"))
+        #expect(!Config.usesLocalStore(from: "~/Library/Application Support/Native Instruments"))
+        #expect(!Config.usesLocalStore(from: ""))
+
+        let to = "Native Instruments/Root Application Support"
+        #expect(Config.linkTargetPath(from: "/Library/Application Support/Native Instruments", to: to)
+                == Config.localStoreRoot + "/" + to)
+        #expect(Config.linkTargetPath(from: "~/Library/Preferences/x", to: to)
+                == Config.expandedDestinationPath(for: to))
+        // A To picked outside the settings folder is used as-is.
+        #expect(Config.linkTargetPath(from: "/Library/Audio/Plug-Ins", to: "/Volumes/Audio/Plug-Ins")
+                == "/Volumes/Audio/Plug-Ins")
+    }
+
     @Test func catalogLocationNamesDecode() throws {
         let yaml = #"[{"path": "~/Documents/Native Instruments", "name": "Documents"}, "/Library/Audio/Plug-Ins"]"#
         let files = try JSONDecoder().decode([FileConfig].self, from: Data(yaml.utf8))

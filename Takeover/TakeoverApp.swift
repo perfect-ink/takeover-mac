@@ -69,6 +69,8 @@ struct TakeoverApp: App {
                     // Push/pull with the account now, on activation, and
                     // every few minutes (pull only for Takeover Cloud).
                     profileSync.startAutoSync()
+                    // Copy /Library locations' local folders into the settings folder.
+                    await LocalStoreSync.keepBackedUp { !needsStorageSetup }
                 }
                 .sheet(isPresented: $needsStorageSetup) {
                     StorageSetupView(isFirstLaunch: true) {

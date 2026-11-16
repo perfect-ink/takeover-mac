@@ -15,3 +15,4 @@ One file per feature; see docs/rules/feature-docs.md.
 - [one_password_prompt.md](one_password_prompt.md): privileged steps share one password prompt.
 - [ignore_sync_settings.md](ignore_sync_settings.md): hide an app from Sync Settings on every Mac; Ignored group with Show All.
 - [broken_links.md](broken_links.md): links whose target is gone show red; Install relinks them.
+- [local_store_for_system_locations.md](local_store_for_system_locations.md): /Library locations link into /Users/Shared/Takeover, backed up to the settings folder, because installers can't write into iCloud Drive through a link.

@@ -322,10 +322,7 @@ struct LinkItemListView: View {
             let to = defaultDestination(for: item, apps: apps, others: all.filter { $0 !== item })
             if to == item.to { CatalogSeen.record(item, to); continue }
             if CatalogSeen.seen(item) == to { continue }
-            if LinkItemInstaller.status(item) == .notInstalled
-                && !FileOps.exists(Config.expandedDestinationPath(for: item.to)) {
-                item.to = to
-                item.label = ""
+            if Self.nothingOnDisk(item), (try? LinkItemInstaller.changeDestination(of: item, to: to)) != nil {
                 CatalogSeen.record(item, to)
                 changed = true
             } else {
@@ -342,9 +339,7 @@ struct LinkItemListView: View {
         var failures: [String] = []
         for move in moves {
             do {
-                try LinkItemInstaller.moveDestination(of: move.item, to: move.to)
-                move.item.to = move.to
-                move.item.label = ""
+                try LinkItemInstaller.changeDestination(of: move.item, to: move.to)
                 CatalogSeen.record(move.item, move.to)
             } catch {
                 failures.append("\(move.item.to): \(error.localizedDescription)")
@@ -367,15 +362,20 @@ struct LinkItemListView: View {
     /// rest move with Reset Locations, which moves their files too.
     private func moveIntoAppFolders(_ all: [LinkItem], apps: [AppConfig]) -> Bool {
         var changed = false
-        for item in all where RecipeInstaller.needsAppFolder(item)
-            && LinkItemInstaller.status(item) == .notInstalled
-            && !FileOps.exists(Config.expandedDestinationPath(for: item.to)) {
-            item.to = defaultDestination(for: item, apps: apps, others: all.filter { $0 !== item })
-            item.label = ""
-            changed = true
+        for item in all where RecipeInstaller.needsAppFolder(item) && Self.nothingOnDisk(item) {
+            let to = defaultDestination(for: item, apps: apps, others: all.filter { $0 !== item })
+            if (try? LinkItemInstaller.changeDestination(of: item, to: to)) != nil { changed = true }
         }
         if changed { try? modelContext.save() }
         return changed
+    }
+
+    /// No link at the source and nothing at the destination: changing To
+    /// can't strand any files or links, so it needs no question.
+    static func nothingOnDisk(_ item: LinkItem) -> Bool {
+        let source = PathUtility.expandTildeToRealHome(item.from)
+        return (item.from.isEmpty || !FileOps.isSymlink(source))
+            && !FileOps.exists(Config.expandedDestinationPath(for: item.to))
     }
 
     /// Adds a sync setting of the user's own: pick a folder or file, and it's
@@ -569,9 +569,7 @@ struct LinkItemListView: View {
             let to = defaultDestination(for: item, apps: apps, others: others)
             guard to != item.to else { continue }
             do {
-                try LinkItemInstaller.moveDestination(of: item, to: to)
-                item.to = to
-                item.label = ""
+                try LinkItemInstaller.changeDestination(of: item, to: to)
                 CatalogSeen.record(item, to)
             } catch {
                 failures.append("\(RecipeInstaller.displayName(of: item)): \(error.localizedDescription)")

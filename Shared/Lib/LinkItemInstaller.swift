@@ -198,34 +198,88 @@ struct LinkItemInstaller {
         }
     }
 
-    /// Moves a location's destination to `newTo` (a name in the settings folder
-    /// or a path) and, when it's linked, points the link at the new place.
-    /// Nothing on disk changes when there's nothing at the old destination.
+    /// The one way to change a location's To. Moves the synced files from the
+    /// old destination to `newTo`, points the source's link at the new place
+    /// when it pointed at the old one, then sets `to` (and clears the label).
+    /// If relinking fails the files are moved back, so a link never ends up
+    /// pointing at a folder that's gone. Throws without changing anything when
+    /// something is already at `newTo` and there are files to move.
+    @MainActor
+    static func changeDestination(of linkItem: LinkItem, to newTo: String) throws {
+        try moveDestination(of: linkItem, to: newTo)
+        linkItem.to = newTo
+        linkItem.label = ""
+    }
+
     @MainActor
     static func moveDestination(of linkItem: LinkItem, to newTo: String) throws {
+        guard !linkItem.to.isEmpty, !newTo.isEmpty else { return }
         let oldPath = Config.expandedDestinationPath(for: linkItem.to)
         let newPath = Config.expandedDestinationPath(for: newTo)
-        guard !linkItem.to.isEmpty, oldPath != newPath, FileOps.exists(oldPath) else { return }
-        // FileOps.move replaces what's there; never clobber another folder.
-        guard !FileOps.exists(newPath) else {
-            throw LinkInstallError.moveToBackupFailed("\(newPath) already exists.")
+        guard !samePath(oldPath, newPath) else { return }
+        let source = linkItem.from.isEmpty ? "" : PathUtility.expandTildeToRealHome(linkItem.from)
+        let sourceIsLink = !source.isEmpty && FileOps.isSymlink(source)
+        // Linked to the old destination, however the link spells it, or (when
+        // the old one is already gone) to the new one's spot.
+        let pointsAtOld = sourceIsLink && linkTarget(source).map { samePath($0, oldPath) || isInside($0, oldPath) } == true
+        let danglingBefore = sourceIsLink && !FileOps.exists(source)
+
+        var moved = false
+        if FileOps.exists(oldPath) || FileOps.isSymlink(oldPath) {
+            // FileOps.move replaces what's there; never clobber another folder.
+            guard !FileOps.exists(newPath) else {
+                throw LinkInstallError.moveToBackupFailed("\(newPath) already exists.")
+            }
+            do {
+                try FileOps.makeDirectory((newPath as NSString).deletingLastPathComponent, allowPrivileged: true)
+                try FileOps.move(from: oldPath, to: newPath, allowPrivileged: true)
+                moved = true
+            } catch {
+                throw LinkInstallError.moveToBackupFailed(error.localizedDescription)
+            }
         }
-        let linked = isLinked(linkItem)
-        do {
-            try FileOps.makeDirectory((newPath as NSString).deletingLastPathComponent, allowPrivileged: true)
-            try FileOps.move(from: oldPath, to: newPath, allowPrivileged: true)
-        } catch {
-            throw LinkInstallError.moveToBackupFailed(error.localizedDescription)
+
+        // Relink when the link pointed at the old destination, or when moving
+        // just broke it (it pointed somewhere inside what moved).
+        let brokenByMove = sourceIsLink && !danglingBefore && !FileOps.exists(source)
+        guard pointsAtOld || brokenByMove else { return }
+        if !FileOps.exists(newPath) {
+            // Nothing to point at (the old destination was already missing):
+            // make the folder so the link isn't left dangling.
+            try FileOps.makeDirectory(newPath, allowPrivileged: true)
         }
-        guard linked else { return }
-        let originalPath = PathUtility.expandTildeToRealHome(linkItem.from)
         do {
-            try FileOps.remove(originalPath, allowPrivileged: true)
-            try FileOps.symlink(at: originalPath, to: newPath, allowPrivileged: true)
+            try FileOps.remove(source, allowPrivileged: true)
+            try FileOps.symlink(at: source, to: newPath, allowPrivileged: true)
+            try verifyLink(originalPath: source, backupPath: newPath)
         } catch {
+            if moved {
+                // Put the files back and the old link with them.
+                try? FileOps.move(from: newPath, to: oldPath, allowPrivileged: true)
+                if !FileOps.isSymlink(source) { try? FileOps.symlink(at: source, to: oldPath, allowPrivileged: true) }
+            }
             throw LinkInstallError.symlinkFailed(error.localizedDescription)
         }
-        try verifyLink(originalPath: originalPath, backupPath: newPath)
+    }
+
+    /// Where the link at `path` points, made absolute.
+    static func linkTarget(_ path: String) -> String? {
+        guard let raw = try? FileManager.default.destinationOfSymbolicLink(atPath: path) else { return nil }
+        return raw.hasPrefix("/") ? raw : ((path as NSString).deletingLastPathComponent as NSString).appendingPathComponent(raw)
+    }
+
+    /// Paths name the same place: symlinked parents resolved, and compared the
+    /// way the Mac's file system does (case- and Unicode-form-insensitive).
+    static func samePath(_ a: String, _ b: String) -> Bool {
+        comparable(a) == comparable(b)
+    }
+
+    private static func isInside(_ path: String, _ folder: String) -> Bool {
+        comparable(path).hasPrefix(comparable(folder) + "/")
+    }
+
+    private static func comparable(_ path: String) -> String {
+        normalized(path).precomposedStringWithCanonicalMapping.lowercased()
     }
 
     /// True when installing would find both a real source and a real synced
@@ -263,11 +317,8 @@ struct LinkItemInstaller {
     static func isLinked(_ linkItem: LinkItem) -> Bool {
         guard !linkItem.from.isEmpty, !linkItem.to.isEmpty else { return false }
         let fromPath = PathUtility.expandTildeToRealHome(linkItem.from)
-        guard FileOps.isSymlink(fromPath),
-              let raw = try? FileManager.default.destinationOfSymbolicLink(atPath: fromPath)
-        else { return false }
-        let target = raw.hasPrefix("/") ? raw : ((fromPath as NSString).deletingLastPathComponent as NSString).appendingPathComponent(raw)
-        return normalized(target) == normalized(Config.expandedDestinationPath(for: linkItem.to))
+        guard FileOps.isSymlink(fromPath), let target = linkTarget(fromPath) else { return false }
+        return samePath(target, Config.expandedDestinationPath(for: linkItem.to))
     }
 
     private static func normalized(_ path: String) -> String {
@@ -283,7 +334,8 @@ struct LinkItemInstaller {
         guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: originalPath) else {
             throw LinkInstallError.verificationFailed("couldn't read the link at \(originalPath).")
         }
-        guard normalized(target) == normalized(backupPath) else {
+        let absolute = linkTarget(originalPath) ?? target
+        guard samePath(absolute, backupPath) else {
             throw LinkInstallError.verificationFailed("\(originalPath) points to \(target), not \(backupPath).")
         }
         guard FileOps.exists(backupPath) else {

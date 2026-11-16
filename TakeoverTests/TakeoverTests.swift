@@ -53,6 +53,47 @@ struct TakeoverTests {
         #expect(fm.fileExists(atPath: src + "/a.txt"))
     }
 
+    /// Every To change goes through changeDestination: the synced files move
+    /// and the source's link follows them, so nothing is left dangling.
+    @MainActor @Test func changingToMovesFilesAndRelinks() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+        defer { try? fm.removeItem(atPath: root) }
+        let old = root + "/Takeover/NativeInstruments", new = root + "/Takeover/Native Instruments/Root Application Support"
+        let source = root + "/Library/Native Instruments"
+        try fm.createDirectory(atPath: old, withIntermediateDirectories: true)
+        try fm.createDirectory(atPath: root + "/Library", withIntermediateDirectories: true)
+        try "kontakt".write(toFile: old + "/prefs.txt", atomically: true, encoding: .utf8)
+        // Spelled with different case, as a link made elsewhere might be.
+        try fm.createSymbolicLink(atPath: source, withDestinationPath: root + "/Takeover/nativeinstruments")
+        let item = LinkItem(name: "Native Instruments", from: source, to: old)
+        #expect(LinkItemInstaller.isLinked(item))
+
+        try LinkItemInstaller.changeDestination(of: item, to: new)
+
+        #expect(item.to == new)
+        #expect(!fm.fileExists(atPath: old))
+        #expect(LinkItemInstaller.isLinked(item))
+        #expect(try String(contentsOfFile: source + "/prefs.txt", encoding: .utf8) == "kontakt")
+    }
+
+    /// A link already dangling at the old destination is pointed at the new one.
+    @MainActor @Test func changingToRepairsALinkToAMissingDestination() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+        defer { try? fm.removeItem(atPath: root) }
+        let new = root + "/Takeover/Audio Plug-Ins/Root Audio Plug-Ins"
+        try fm.createDirectory(atPath: new, withIntermediateDirectories: true)
+        let source = root + "/Plug-Ins"
+        try fm.createSymbolicLink(atPath: source, withDestinationPath: root + "/Takeover/AudioPlug-Ins")
+        let item = LinkItem(name: "Audio Plug-Ins", from: source, to: root + "/Takeover/AudioPlug-Ins")
+
+        try LinkItemInstaller.changeDestination(of: item, to: new)
+
+        #expect(LinkItemInstaller.isLinked(item))
+        #expect(LinkItemInstaller.status(item) == .installed)
+    }
+
     @Test func catalogLocationNamesDecode() throws {
         let yaml = #"[{"path": "~/Documents/Native Instruments", "name": "Documents"}, "/Library/Audio/Plug-Ins"]"#
         let files = try JSONDecoder().decode([FileConfig].self, from: Data(yaml.utf8))

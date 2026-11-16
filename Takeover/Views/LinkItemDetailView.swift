@@ -214,7 +214,7 @@ struct LinkItemDetailView: View {
                         Button("Browse...") {
                             Task {
                                 if let path = try await selectFile(startingAt: toBrowseStart) {
-                                    linkItem.to = toValue(forPicked: path)
+                                    changeTo(toValue(forPicked: path))
                                 }
                             }
                         }
@@ -268,7 +268,7 @@ struct LinkItemDetailView: View {
         .padding(embedded ? 0 : 24)
         .frame(minWidth: embedded ? 0 : 400)
         .alert(
-            "Couldn't rename this location",
+            "Couldn't change this location's destination",
             isPresented: Binding(get: { renameError != nil }, set: { if !$0 { renameError = nil } })
         ) {
             Button("OK", role: .cancel) { renameError = nil }
@@ -325,16 +325,22 @@ struct LinkItemDetailView: View {
             linkItem.label = new
         } else {
             let to = RecipeInstaller.uniqueDestination(appName: linkItem.name, location: new, from: linkItem.from, others: otherItems)
-            do {
-                try LinkItemInstaller.moveDestination(of: linkItem, to: to)
-            } catch {
-                renameError = error.localizedDescription
-                return
-            }
-            linkItem.to = to
-            linkItem.label = ""
+            guard changeTo(to) else { return }
         }
         onSave?(linkItem)
+    }
+
+    /// Changes To through `changeDestination`, so a linked location's files
+    /// move and its link follows. Shows why when it can't.
+    @discardableResult
+    private func changeTo(_ to: String) -> Bool {
+        do {
+            try LinkItemInstaller.changeDestination(of: linkItem, to: to)
+            return true
+        } catch {
+            renameError = error.localizedDescription
+            return false
+        }
     }
 
     /// Link status icon plus the Install / Uninstall button.
@@ -379,8 +385,7 @@ struct LinkItemDetailView: View {
     /// destination never moves.
     private func updateToForPickedSource() {
         guard !RecipeInstaller.isAbsolute(linkItem.to) else { return }
-        linkItem.to = RecipeInstaller.destination(appName: linkItem.name, from: linkItem.from, others: otherItems)
-        linkItem.label = ""
+        changeTo(RecipeInstaller.destination(appName: linkItem.name, from: linkItem.from, others: otherItems))
     }
 
     private var otherItems: [LinkItem] {

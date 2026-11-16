@@ -271,7 +271,12 @@ struct TakeoverApp: App {
         for item in (try? context.fetch(FetchDescriptor<LinkItem>())) ?? [] {
             if let config = links[item.name] {
                 item.from = expandTilde(config.from)
-                item.to = expandTilde(config.to)
+                // Another Mac renamed this location (and moved the shared
+                // folder): repoint this Mac's link too, never just the To.
+                let to = expandTilde(config.to)
+                // If that fails, this Mac keeps its working To rather than
+                // stranding its link.
+                if item.to != to { try? LinkItemInstaller.changeDestination(of: item, to: to) }
                 item.defaults = config.defaults ?? ""
             } else {
                 context.delete(item)

@@ -192,7 +192,7 @@ struct LinkItemDetailView: View {
                         Spacer()
                         if !linkItem.to.isEmpty {
                             Button(action: {
-                                openInFinder(path: linkItem.to)
+                                openInFinder(path: Config.destinationPath(for: linkItem.to))
                             }) {
                                 Image(systemName: "folder")
                                     .foregroundColor(.blue)
@@ -485,13 +485,10 @@ struct LinkItemDetailView: View {
     }
 
     func openInFinder(path: String) {
-        // A "from" field is a full path; a "to" field is just a backup name.
-        let target: String
-        if path.contains("/") {
-            target = PathUtility.expandTildeToRealHome(path)
-        } else {
-            target = PathUtility.expandTildeToRealHome("\(Config.backupPath)/\(path)")
-        }
+        // Callers pass a full (or ~) path; To goes through
+        // Config.destinationPath first, since "App/Location" is relative to
+        // the settings folder.
+        let target = PathUtility.expandTildeToRealHome(path)
 
         // If the target exists, reveal (and select) it in Finder. Otherwise walk
         // up to the nearest existing ancestor and open that.

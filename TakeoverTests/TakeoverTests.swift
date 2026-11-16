@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftData
 import Testing
 @testable import Takeover
 
@@ -109,6 +110,26 @@ struct TakeoverTests {
         // A To picked outside the settings folder is used as-is.
         #expect(Config.linkTargetPath(from: "/Library/Audio/Plug-Ins", to: "/Volumes/Audio/Plug-Ins")
                 == "/Volumes/Audio/Plug-Ins")
+    }
+
+    /// A folder inside a linked location (Kontakt 7 inside a linked Native
+    /// Instruments folder) can't be installed until the parent is unlinked.
+    @MainActor @Test func installRefusesAFolderInsideALinkedLocation() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+        defer { try? fm.removeItem(atPath: root) }
+        try fm.createDirectory(atPath: root + "/Synced/Kontakt 7", withIntermediateDirectories: true)
+        try fm.createSymbolicLink(atPath: root + "/Native Instruments", withDestinationPath: root + "/Synced")
+
+        let container = try ModelContainer(for: LinkItem.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let context = container.mainContext
+        let parent = LinkItem(name: "Native Instruments", from: root + "/Native Instruments", to: root + "/Synced")
+        let child = LinkItem(name: "Native Instruments", from: root + "/Native Instruments/Kontakt 7", to: root + "/Kontakt 7")
+        context.insert(parent)
+        context.insert(child)
+
+        #expect(LinkItemInstaller.linkedParent(of: child)?.from == parent.from)
+        #expect(LinkItemInstaller.linkedParent(of: parent) == nil)
     }
 
     @Test func catalogLocationNamesDecode() throws {

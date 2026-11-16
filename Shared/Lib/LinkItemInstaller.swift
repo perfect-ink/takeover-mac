@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftData
 
 enum LinkInstallError: LocalizedError {
     case fullDiskAccessRequired
@@ -16,6 +17,7 @@ enum LinkInstallError: LocalizedError {
     case defaultsCommandFailed(String)
     case restoreFailed(String)
     case verificationFailed(String)
+    case insideLinkedLocation(String)
 
     var errorDescription: String? {
         switch self {
@@ -33,6 +35,8 @@ enum LinkInstallError: LocalizedError {
             return "The link was created but doesn't look right: \(detail)"
         case let .restoreFailed(detail):
             return "The link was removed, but restoring the files failed: \(detail)"
+        case let .insideLinkedLocation(name):
+            return "This folder is inside \(name), which is linked. Uninstall \(name) with Move destination first, so this folder is real again, then install it."
         case let .defaultsCommandFailed(detail):
             return "The linked defaults command failed: \(detail)"
         }
@@ -80,6 +84,12 @@ struct LinkItemInstaller {
 
         // Already linked to this destination: nothing to do.
         if isLinked(linkItem) { return }
+
+        // Linking a folder that sits inside another linked location would move
+        // files around inside that location's synced copy.
+        if let parent = linkedParent(of: linkItem) {
+            throw LinkInstallError.insideLinkedLocation(parent.name)
+        }
 
         let backupPath = target(of: linkItem)
         let originalPath = PathUtility.expandTildeToRealHome(linkItem.from)
@@ -271,6 +281,27 @@ struct LinkItemInstaller {
             }
             throw LinkInstallError.symlinkFailed(error.localizedDescription)
         }
+    }
+
+    /// Another saved location that is linked and whose source contains this
+    /// one's, e.g. /Library/Application Support/Native Instruments for its
+    /// Kontakt 7 folder.
+    static func linkedParent(of linkItem: LinkItem) -> LinkItem? {
+        guard !linkItem.from.isEmpty, let context = linkItem.modelContext,
+              let items = try? context.fetch(FetchDescriptor<LinkItem>()) else { return nil }
+        let source = plainPath(linkItem.from)
+        return items.first { other in
+            other.persistentModelID != linkItem.persistentModelID && !other.from.isEmpty
+                && source.hasPrefix(plainPath(other.from) + "/")
+                && FileOps.isSymlink(PathUtility.expandTildeToRealHome(other.from))
+        }
+    }
+
+    /// Expanded and standardized without resolving links, compared the way
+    /// the Mac's file system does.
+    private static func plainPath(_ path: String) -> String {
+        (PathUtility.expandTildeToRealHome(path) as NSString).standardizingPath
+            .precomposedStringWithCanonicalMapping.lowercased()
     }
 
     /// What this item's link points to (see `Config.linkTargetPath`).

@@ -10,7 +10,10 @@
 # profiles, files that mostly hold credentials, and license or activation
 # data (moving it can deactivate a plug-in). When a vendor keeps its apps' settings under one company folder
 # (Native Instruments, Ableton, Image-Line, JetBrains), sync the whole company
-# folder rather than one app's subfolder.
+# folder rather than one app's subfolder. Exception: /Library/Application
+# Support/Native Instruments stays a real folder, and each product folder in
+# it is its own location, leaving out NTK and Service Center (licensing and
+# activation, which NI's installers and Native Access manage).
 #
 # `os_recipies` keeps the old api/repository.json spelling; the Mac app
 # decodes that key.
@@ -49,8 +52,62 @@ apps:
         path: ~/Library/Audio/Plug-Ins
   - name: Native Instruments
     files:
-      - name: Root Application Support
-        path: /Library/Application Support/Native Instruments
+      - name: Root Battery 4
+        path: /Library/Application Support/Native Instruments/Battery 4
+      - name: Root Controller Editor
+        path: /Library/Application Support/Native Instruments/Controller Editor
+      - name: Root Dirt
+        path: /Library/Application Support/Native Instruments/Dirt
+      - name: Root Driver
+        path: /Library/Application Support/Native Instruments/Driver
+      - name: Root FM8
+        path: /Library/Application Support/Native Instruments/FM8
+      - name: Root Guitar Rig 2
+        path: /Library/Application Support/Native Instruments/Guitar Rig 2
+      - name: Root Guitar Rig 4
+        path: /Library/Application Support/Native Instruments/Guitar Rig 4
+      - name: Root Guitar Rig 5
+        path: /Library/Application Support/Native Instruments/Guitar Rig 5
+      - name: Root Guitar Rig 6
+        path: /Library/Application Support/Native Instruments/Guitar Rig 6
+      - name: Root Guitar Rig 7
+        path: /Library/Application Support/Native Instruments/Guitar Rig 7
+      - name: Root Hardware
+        path: /Library/Application Support/Native Instruments/Hardware
+      - name: Root Host Integration
+        path: /Library/Application Support/Native Instruments/Host Integration
+      - name: Root Komplete Kontrol
+        path: /Library/Application Support/Native Instruments/Komplete Kontrol
+      - name: Root Kontakt
+        path: /Library/Application Support/Native Instruments/Kontakt
+      - name: Root Kontakt 6
+        path: /Library/Application Support/Native Instruments/Kontakt 6
+      - name: Root Kontakt 7
+        path: /Library/Application Support/Native Instruments/Kontakt 7
+      - name: Root Kontakt 8
+        path: /Library/Application Support/Native Instruments/Kontakt 8
+      - name: Root Kore 2
+        path: /Library/Application Support/Native Instruments/Kore 2
+      - name: Root Maschine 2
+        path: /Library/Application Support/Native Instruments/Maschine 2
+      - name: Root Maschine 3
+        path: /Library/Application Support/Native Instruments/Maschine 3
+      - name: Root Massive
+        path: /Library/Application Support/Native Instruments/Massive
+      - name: Root Massive X
+        path: /Library/Application Support/Native Instruments/Massive X
+      - name: Root Reaktor 6
+        path: /Library/Application Support/Native Instruments/Reaktor 6
+      - name: Root Shared Content
+        path: /Library/Application Support/Native Instruments/Shared Content
+      - name: Root Solid Bus Comp FX
+        path: /Library/Application Support/Native Instruments/Solid Bus Comp FX
+      - name: Root Solid Dynamics
+        path: /Library/Application Support/Native Instruments/Solid Dynamics
+      - name: Root Solid EQ
+        path: /Library/Application Support/Native Instruments/Solid EQ
+      - name: Root Supercharger GT
+        path: /Library/Application Support/Native Instruments/Supercharger GT
       - name: User Application Support
         path: ~/Library/Application Support/Native Instruments
       - name: User Documents

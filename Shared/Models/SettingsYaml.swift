@@ -14,12 +14,15 @@ struct SettingsYaml: Codable {
     var appInstallers: [AppInstallerConfig]?
     /// The synced "restore list" (see AppEntryModel).
     var apps: [AppEntryConfig]?
+    /// Apps the user chose to ignore in Sync Settings, by name.
+    var ignoredSyncSettings: [String]?
 
     enum CodingKeys: String, CodingKey {
         case links
         case macDefaults = "mac_defaults"
         case appInstallers = "app_installers"
         case apps
+        case ignoredSyncSettings = "ignored_sync_settings"
     }
 
     init(links: [LinkConfig], macDefaults: [MacDefaultConfig]? = nil,
@@ -41,6 +44,7 @@ struct SettingsYaml: Codable {
         macDefaults = try container.decodeIfPresent([MacDefaultConfig].self, forKey: .macDefaults)
         appInstallers = try container.decodeIfPresent([AppInstallerConfig].self, forKey: .appInstallers)
         apps = try container.decodeIfPresent([AppEntryConfig].self, forKey: .apps)
+        ignoredSyncSettings = try container.decodeIfPresent([String].self, forKey: .ignoredSyncSettings)
     }
 }
 
@@ -49,8 +53,15 @@ class SettingsManager: ObservableObject {
     @Published var settings: SettingsYaml?
     @Published var location: StorageLocation = .current
 
-    private let fileName = "takeover-settings.yaml"
-    private let macDefaultsFileName = "mac-defaults.yaml"
+    static let fileName = "takeover-settings.yaml"
+    static let macDefaultsFileName = "mac-defaults.yaml"
+    private var fileName: String { Self.fileName }
+    private var macDefaultsFileName: String { Self.macDefaultsFileName }
+
+    /// Fingerprint of both files as this process last read or wrote them, to
+    /// tell changes made elsewhere (another Mac, the background agent) from
+    /// our own saves.
+    private var knownDiskFingerprint: String?
 
     private init() {}
 
@@ -116,6 +127,7 @@ class SettingsManager: ObservableObject {
             try writeSettingsFile(settings)
         }
 
+        rememberDiskState()
         await MainActor.run {
             self.settings = settings
         }
@@ -123,17 +135,48 @@ class SettingsManager: ObservableObject {
         return settings
     }
 
+    /// Reads the settings files in any Takeover folder (for Restore) without
+    /// creating, migrating or changing anything there. A missing or empty
+    /// file reads as empty.
+    static func read(folder: String) throws -> SettingsYaml {
+        let directory = URL(fileURLWithPath: PathUtility.expandTildeToRealHome(folder))
+        func text(_ name: String) -> String? {
+            guard let text = try? String(contentsOf: directory.appendingPathComponent(name), encoding: .utf8),
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            return text
+        }
+        var settings = SettingsYaml(links: [])
+        if let yaml = text("takeover-settings.yaml") {
+            settings = try YAMLDecoder().decode(SettingsYaml.self, from: yaml)
+        }
+        if let yaml = text("mac-defaults.yaml") {
+            settings.macDefaults = try YAMLDecoder().decode(MacDefaultsYaml.self, from: yaml).macDefaults
+        }
+        return settings
+    }
+
     func saveSettings(_ settings: SettingsYaml) async throws {
         try writeSettingsFile(settings)
-        try writeMacDefaults(settings.macDefaults ?? [])
+        try writeMacDefaults(settings.macDefaults ?? [], madeOnThisMac: true)
+        rememberDiskState()
 
         await MainActor.run {
             self.settings = settings
         }
 
         syncProfileToAccount(settings)
-        if location.provider == .takeoverCloud {
-            await TakeoverCloud.shared.push(settings)
+    }
+
+    /// Writes settings that came from the Takeover account (a newer profile
+    /// pushed by another Mac). Same as `saveSettings` but doesn't push them
+    /// back up, so two Macs never bounce the same change between them.
+    func applyFromAccount(_ settings: SettingsYaml) async throws {
+        try writeSettingsFile(settings)
+        try writeMacDefaults(settings.macDefaults ?? [])
+        rememberDiskState()
+
+        await MainActor.run {
+            self.settings = settings
         }
     }
 
@@ -147,43 +190,56 @@ class SettingsManager: ObservableObject {
     private func loadMacDefaults() throws -> [MacDefaultConfig]? {
         let url = macDefaultsFileURL
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        let yaml = String(data: try Data(contentsOf: url), encoding: .utf8) ?? ""
+        return try Self.decodeMacDefaults(try Data(contentsOf: url))
+    }
+
+    /// Contents of a `mac-defaults.yaml`; an empty file means no defaults.
+    static func decodeMacDefaults(_ data: Data) throws -> [MacDefaultConfig]? {
+        let yaml = String(data: data, encoding: .utf8) ?? ""
         if yaml.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return [] }
         return try YAMLDecoder().decode(MacDefaultsYaml.self, from: yaml).macDefaults
     }
 
-    private func writeMacDefaults(_ macDefaults: [MacDefaultConfig]) throws {
+    /// `madeOnThisMac` marks an edit from this Mac's own UI, which the
+    /// background agent doesn't apply by itself (the tab has Apply buttons);
+    /// changes from another Mac or the account are applied right away. The
+    /// mark is saved before the file so the agent never sees the file first.
+    private func writeMacDefaults(_ macDefaults: [MacDefaultConfig], madeOnThisMac: Bool = false) throws {
         let yaml = try YAMLEncoder().encode(MacDefaultsYaml(macDefaults: macDefaults))
+        let fingerprint = MacDefaultsEnforcer.fingerprint(Data(yaml.utf8))
+        if madeOnThisMac {
+            UserDefaults.standard.set(fingerprint, forKey: MacDefaultsEnforcer.localWriteKey)
+        } else if UserDefaults.standard.string(forKey: MacDefaultsEnforcer.localWriteKey) == fingerprint {
+            UserDefaults.standard.removeObject(forKey: MacDefaultsEnforcer.localWriteKey)
+        }
         try yaml.write(to: macDefaultsFileURL, atomically: true, encoding: .utf8)
+    }
+
+    // MARK: - Changes made elsewhere
+
+    private func diskFingerprint() -> String {
+        let data = [settingsFileURL, macDefaultsFileURL]
+            .map { (try? Data(contentsOf: $0)) ?? Data() }
+            .reduce(Data(), +)
+        return MacDefaultsEnforcer.fingerprint(data)
+    }
+
+    private func rememberDiskState() {
+        knownDiskFingerprint = diskFingerprint()
+    }
+
+    /// Whether either settings file differs from what this process last
+    /// read or wrote.
+    var hasChangedOnDisk: Bool {
+        diskFingerprint() != knownDiskFingerprint
     }
 
     /// When signed in, push this Mac's setup to the account (debounced). No-op
     /// otherwise. Mac-default rows are enriched with domain/key/type from the
     /// catalog so the profile is self-contained on the restoring Mac.
     private func syncProfileToAccount(_ settings: SettingsYaml) {
-        let catalog = Dictionary(
-            MacDefaultCatalog.shared.entries.map { ($0.name, $0) },
-            uniquingKeysWith: { first, _ in first }
-        )
-
-        let defaults: [Profile.MacDefaultEntry] = (settings.macDefaults ?? []).compactMap { cfg in
-            guard let value = cfg.value, !value.isEmpty, let e = catalog[cfg.name] else { return nil }
-            return Profile.MacDefaultEntry(
-                name: e.name, domain: e.domain, key: e.key, type: e.type,
-                value: value, hostFlag: e.hostFlag ?? "", postCommand: e.postCommand ?? "")
-        }
-        let links = settings.links.map {
-            Profile.LinkEntry(name: $0.name, from: $0.from, to: $0.to, defaults: $0.defaults ?? "")
-        }
-        let apps = (settings.apps ?? []).map {
-            Profile.AppEntry(
-                name: $0.name,
-                source: Profile.AppSource(rawValue: $0.source) ?? .brew,
-                cask: $0.cask, masID: $0.masID)
-        }
-        let profile = Profile(version: 1, macDefaults: defaults, links: links, apps: apps)
-
         Task { @MainActor in
+            let profile = Profile(settings: settings, catalog: MacDefaultCatalog.shared.entries)
             ProfileSyncManager.shared.schedulePush(profile)
         }
     }

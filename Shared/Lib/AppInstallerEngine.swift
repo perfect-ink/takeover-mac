@@ -20,9 +20,19 @@ enum AppFileType {
         case .pkg: return "PKG"
         }
     }
+
+    /// Finishes "Installs from …" on an app card.
+    var sourceDescription: String {
+        switch self {
+        case .zip: return "a ZIP archive"
+        case .dmg: return "a disk image"
+        case .app: return "an app copy"
+        case .pkg: return "an installer package"
+        }
+    }
 }
 
-struct DiscoveredApp: Identifiable {
+struct DiscoveredApp: Identifiable, Equatable {
     var id: String { fileURL.path }
     var name: String
     var fileURL: URL
@@ -171,7 +181,7 @@ struct AppInstallerEngine {
         return (success, success ? "Installed \(appName)" : "Installation failed", appName)
     }
 
-    private static func findApp(in directory: URL) -> URL? {
+    static func findApp(in directory: URL) -> URL? {
         guard let contents = try? FileManager.default.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.isDirectoryKey],
@@ -190,7 +200,7 @@ struct AppInstallerEngine {
         return nil
     }
 
-    private static func parseMountPoint(from output: String) -> String? {
+    static func parseMountPoint(from output: String) -> String? {
         guard let data = output.data(using: .utf8),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
               let entities = plist["system-entities"] as? [[String: Any]] else {

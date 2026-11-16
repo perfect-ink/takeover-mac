@@ -1,37 +1,35 @@
-# AGENTS.md — Takeover
+# takeover-mac
 
-Takeover sets up a Mac from a settings file: it installs apps, applies macOS defaults, and links config files into place. It ships as a SwiftUI app and a `takeover` command-line tool that share code.
+This file stays minimal. It loads the shared rules (synced from agent-rules into `docs/rules/`) and this project's settings and facts (`docs/project/`). Edit those, not this file.
 
-## Commands
+## Shared rules
 
-- `make` (`make setup dev`): check Xcode, resolve SwiftPM dependencies, build Debug, and open it.
-- `make test`: unit tests (`TakeoverTests` only; `TakeoverUITests` is excluded because it is slow and flaky).
-- `make build`: Release build. `make install` / `make uninstall` / `make reinstall`: manage `/Applications`. `make package`: `build/Takeover.dmg`.
-- `make cli` / `make install-cli`: build and install the `takeover` CLI.
-- `make verify-sign`, `make reset-tcc`: signing check and TCC reset.
-- `make close` / `make clean`; `make help` lists everything.
+<!-- agent-rules:begin -->
+Shared rules from agent-rules, synced by `make rules`. Don't edit them here; docs/project/ holds this repo's settings and facts, not rules.
 
-## Layout
+@docs/rules/project-settings.md
+@docs/rules/backend.md
+@docs/rules/backlog-mode.md
+@docs/rules/backlog.md
+@docs/rules/code-requirements.md
+@docs/rules/conventions.md
+@docs/rules/deployment.md
+@docs/rules/design-principles.md
+@docs/rules/documentation.md
+@docs/rules/feature-docs.md
+@docs/rules/frontend.md
+@docs/rules/make-files.md
+@docs/rules/native.md
+@docs/rules/prototyping-mode.md
+@docs/rules/versioning.md
+<!-- agent-rules:end -->
 
-- `Shared/`: code used by both the app and the CLI: `Models/` (settings YAML, link items, defaults, installers), `Lib/` (installer engines, linker, system operations, permissions), `Data/`, and config/path helpers.
-- `Takeover/`: the SwiftUI app (`Views/`, `Account/`, `Profile/`, `Net/`).
-- `TakeoverCLI/`: the terminal UI and command-line entry point.
-- `TakeoverTests/`, `TakeoverUITests/`: XCTest suites.
-- `design/`: design assets.
+## Project settings and facts
 
-## Conventions
+Settings and facts about this repo (its stack, layout, how to run it, where it deploys). They don't change the shared rules. Add one `@docs/project/<name>.md` line per file.
 
-- Put logic in `Shared/` when both the app and the CLI need it, and keep it free of SwiftUI.
-- The project uses synchronized folders, so new files in existing folders are picked up automatically. Check target membership for files in `Shared/`.
-- Run shell commands through `SystemOps.run` / `SystemOps.require` rather than spawning processes directly. Linking replaces files at the destination, so be careful with any change to `Linker`.
+@docs/project/settings.md
 
-## Design principles
+## Features
 
-Follow the [design principles](docs/rules/design-principles.md) for any UI work.
-
-## After changing code
-
-1. `make test`
-2. `make dev`
-
-Commit messages are one short, imperative line, like the existing history.
+@docs/features/README.md

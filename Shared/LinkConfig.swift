@@ -5,6 +5,7 @@ struct LinkConfig: Codable {
     var from: String
     var to: String
     var defaults: String?
+    var label: String?
 }
 
 /// One macOS default the user has set. Domain/key/type are stored alongside
@@ -51,9 +52,21 @@ struct AppEntryConfig: Codable {
     var source: String
     var cask: String?
     var masID: String?
+    /// Install automatically on a new Mac (Restore > Apply All). Omitted
+    /// from the file when false.
+    var alwaysInstall: Bool?
 
     enum CodingKeys: String, CodingKey {
         case name, source, cask
         case masID = "mas_id"
+        case alwaysInstall = "always_install"
+    }
+
+    init(name: String, source: String, cask: String? = nil, masID: String? = nil, alwaysInstall: Bool = false) {
+        self.name = name
+        self.source = source
+        self.cask = cask
+        self.masID = masID
+        self.alwaysInstall = alwaysInstall ? true : nil
     }
 }

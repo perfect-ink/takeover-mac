@@ -67,7 +67,7 @@ struct Menu {
                 : "\(ANSI.dim)Not installed\(ANSI.reset)"
             terminal.outputLine("Status:  \(status)")
             terminal.outputLine("From:    \(link.from)")
-            terminal.outputLine("To:      \(Config.backupPath)/\(link.to)")
+            terminal.outputLine("To:      \(Config.destinationPath(for: link.to))")
             if let defaults = link.defaults, !defaults.isEmpty {
                 terminal.outputLine("Command: \(defaults)")
             }

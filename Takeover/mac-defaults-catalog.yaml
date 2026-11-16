@@ -1,3 +1,17 @@
+# Available macOS defaults: the `defaults write` settings the Mac app's
+# macOS Tweaks tab lists. Served as a static file at
+# https://takeoverapp.site/catalog/mac-defaults.yaml (and readable straight
+# from GitHub). db/seeds.rb loads the same file into the DB behind
+# GET /api/v1/mac_defaults, so edit here and re-seed.
+#
+# Each entry describes a setting, never a value: the values a user picks
+# live in their own settings folder (iCloud, Dropbox, a folder) or in
+# Takeover Cloud.
+#
+# macOS versions: `min_macos` / `max_macos` are inclusive macOS major
+# versions (13 Ventura, 14 Sonoma, 15 Sequoia, 26 Tahoe, ...). Leave either
+# out for no bound. The app hides entries outside the running Mac's range.
+
 - name: Dark Mode
   domain: NSGlobalDomain
   key: AppleInterfaceStyle
@@ -44,6 +58,7 @@
 - name: Stage Manager Click
   domain: com.apple.WindowManager
   key: EnableStandardClickToShowDesktop
+  min_macos: 14
   type: int
   category: Global
 

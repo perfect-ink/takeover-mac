@@ -16,6 +16,9 @@ CLI_SRC     := $(BUILD_DIR)/Build/Products/Release/$(CLI_NAME)
 DMG         := $(BUILD_DIR)/$(APP).dmg
 
 INSTALL_DST := /Applications/$(APP).app
+# macOS caches app icons by bundle path, so an in-place update keeps showing
+# the old icon. Touching the bundle and re-registering it refreshes the cache.
+LSREGISTER  := /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 PREFIX      ?= /usr/local
 CLI_DST     := $(PREFIX)/bin/$(CLI_NAME)
 
@@ -37,7 +40,7 @@ XCODE_FLAGS ?=
 .DEFAULT_GOAL := all
 
 .PHONY: all help setup dev open close test build install uninstall reinstall \
-        package cli install-cli verify-sign reset-tcc clean
+        package cli install-cli verify-sign reset-tcc catalog clean
 
 ##@ Common
 
@@ -67,6 +70,7 @@ dev: ## Build a debug .app (replacing any previous one) and open it.
 	-killall $(APP) 2>/dev/null; true
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration Debug \
 		-derivedDataPath $(BUILD_DIR) -quiet build
+	@touch "$(DEV_APP)"; $(LSREGISTER) -f "$(DEV_APP)" 2>/dev/null; true
 	open "$(DEV_APP)"
 
 open: ## Open the already-built dev app (run `make dev` first if there isn't one).
@@ -82,12 +86,12 @@ close: ## Kill the running app. Only if native.
 # boots the full app and is slow/flaky for a plain `make test`.)
 test: ## Run the unit-test suite.
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration Debug \
-		-destination 'platform=macOS' -only-testing:TakeoverTests test
+		-destination 'platform=macOS' -only-testing:TakeoverTests test $(SIGN_FLAGS)
 	@echo "Tests completed successfully!"
 
 ##@ Production
 
-build: ## Build for production (Release), no install.
+build: catalog ## Build for production (Release), no install. Refreshes the offline catalogs first.
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration Release \
 		-derivedDataPath $(BUILD_DIR) -quiet build $(SIGN_FLAGS) $(XCODE_FLAGS)
 	@echo "==> $(RELEASE_APP)"
@@ -98,6 +102,7 @@ install: build ## Build for production and install to /Applications.
 	@# --delete removes files that no longer exist in the fresh build.
 	mkdir -p "$(INSTALL_DST)"
 	rsync -a --delete "$(RELEASE_APP)/" "$(INSTALL_DST)/"
+	@touch "$(INSTALL_DST)"; $(LSREGISTER) -f "$(INSTALL_DST)" 2>/dev/null; true
 	@$(MAKE) --no-print-directory verify-sign
 	open "$(INSTALL_DST)"
 	@echo "$(APP).app installed to $(INSTALL_DST)"
@@ -154,6 +159,31 @@ reset-tcc: ## Forget every TCC grant for the app (re-prompt from a clean slate).
 
 ##@ Maintenance
 
+# Recipes live only in takeover-site's public/catalog/*.yaml. The app fetches
+# them at runtime; the bundled copies are just the offline fallback, and every
+# production build refreshes them first (keeping the old copy if
+# takeoverapp.site can't be reached).
+CATALOG_URL := https://takeoverapp.site/catalog
+
+catalog: ## Refresh the bundled offline recipe catalogs from takeoverapp.site.
+	@mkdir -p $(BUILD_DIR)
+	@for pair in mac-defaults:mac-defaults-catalog apps:apps-catalog; do \
+		src=$${pair%%:*}; dst="$(APP)/$${pair##*:}.yaml"; tmp="$(BUILD_DIR)/download-$$src.yaml"; \
+		if ! curl -fsSL "$(CATALOG_URL)/$$src.yaml" -o "$$tmp"; then echo "warning: couldn't fetch $$src.yaml; keeping the bundled copy"; \
+		elif [ "$$(grep -c '^ *- name:' "$$tmp")" -lt "$$(grep -c '^ *- name:' "$$dst")" ]; then \
+			echo "warning: the site's $$src.yaml has fewer recipes than the bundled copy (not deployed yet?); keeping the bundled copy"; \
+		else mv "$$tmp" "$$dst"; echo "Updated $$dst"; fi; \
+	done
+
 clean: ## Clean existing builds.
 	rm -rf $(BUILD_DIR)
 	@echo "Cleaned $(BUILD_DIR)"
+
+
+AGENT_RULES ?= $(HOME)/Sites/agent-rules
+
+rules: ## Sync shared agent rules from agent-rules into docs/rules/
+	@$(AGENT_RULES)/bin/agent-rules sync "$(CURDIR)"
+
+rules-check: ## Show what `make rules` would change (exit 1 if anything)
+	@$(AGENT_RULES)/bin/agent-rules check "$(CURDIR)"

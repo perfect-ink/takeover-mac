@@ -36,6 +36,8 @@ struct MacDefaultCatalogEntry: Codable {
 class MacDefaultCatalog {
     static let shared = MacDefaultCatalog()
     private(set) var entries: [MacDefaultCatalogEntry] = []
+    /// Catalog defaults that don't apply to this macOS; never enforced here.
+    private(set) var unsupportedNames: Set<String> = []
 
     private init() {}
 
@@ -50,5 +52,7 @@ class MacDefaultCatalog {
         )
         let version = SystemInfo.macOSMajorVersion
         entries = all.filter { $0.supports(macOSMajorVersion: version) }
+        let supportedNames = Set(entries.map(\.name))
+        unsupportedNames = Set(all.map(\.name)).subtracting(supportedNames)
     }
 }

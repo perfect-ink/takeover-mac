@@ -1,6 +1,18 @@
+import AppKit
 import SwiftUI
 import SwiftData
 
+/// Where a restore reads from: a Takeover settings folder on this Mac
+/// (iCloud Drive, Dropbox, any folder) or a Mac saved to the Takeover Cloud
+/// account.
+enum RestoreSource: Hashable {
+    case folder(String)   // tilde-prefixed root path
+    case computer(Int)
+}
+
+/// Restore: pick a Takeover folder (or, with Takeover Cloud, one of the
+/// account's Macs), see what it holds, and apply all of it (or a selection)
+/// to this Mac: Mac defaults, sync settings (links), installers and apps.
 struct RestoreView: View {
     @EnvironmentObject var account: AccountManager
     @EnvironmentObject var sync: ProfileSyncManager
@@ -10,16 +22,20 @@ struct RestoreView: View {
     @Query(sort: \MacDefault.name) private var currentDefaults: [MacDefault]
     @Query(sort: \AppEntryModel.name) private var currentApps: [AppEntryModel]
 
-    @State private var showAccount = false
     @State private var isSavingState = false
     @State private var saveStateMessage: String?
-    @State private var selectedComputerID: Int?
+    @State private var selection: RestoreSource?
     @State private var profile: Profile?
     @State private var loadingProfile = false
+    @State private var loadError: String?
+
+    /// Folders that already hold Takeover settings, plus any the user picked.
+    @State private var folders: [StorageLocation] = StorageLocation.detectExisting().map(\.location)
 
     @State private var pickedDefaults: Set<String> = []
     @State private var pickedLinks: Set<String> = []
     @State private var pickedApps: Set<String> = []
+    @State private var pickedInstallers: Set<String> = []
 
     @State private var isRestoring = false
     @State private var outcomes: [String: String] = [:]   // row id -> status text
@@ -40,77 +56,117 @@ struct RestoreView: View {
                     } label: { Label("Save Current State", systemImage: "square.and.arrow.up") }
                     .help("Save this Mac's Sync Settings, Mac Defaults, and Applications to your account now")
                     .disabled(isSavingState)
-
-                    Button {
-                        Task { await sync.loadComputers() }
-                    } label: { Label("Refresh", systemImage: "arrow.clockwise") }
-                    .disabled(sync.isLoadingComputers)
                 }
-                AccountButton(showAccount: $showAccount)
+                Button {
+                    chooseFolder()
+                } label: { Label("Choose Folder", systemImage: "folder.badge.plus") }
+                .help("Restore from a Takeover settings folder anywhere on this Mac")
+                Button {
+                    refresh()
+                } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                .disabled(sync.isLoadingComputers)
             }
 
-            if !account.isSignedIn {
-                signedOut
-            } else {
-                HStack(spacing: 0) {
-                    computerList
-                        .frame(width: 240)
-                    Divider()
-                    detail
-                        .frame(maxWidth: .infinity)
-                }
+            HStack(spacing: 0) {
+                sourceList
+                    .frame(width: 260)
+                Divider()
+                detail
+                    .frame(maxWidth: .infinity)
             }
-        }
-        .sheet(isPresented: $showAccount) {
-            AccountView(isPresented: $showAccount).environmentObject(account)
         }
         .task(id: account.isSignedIn) {
             if account.isSignedIn { await sync.loadComputers() }
         }
     }
 
-    // MARK: signed out
+    // MARK: sources
 
-    private var signedOut: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "arrow.clockwise.icloud").font(.system(size: 40)).foregroundStyle(.secondary)
-            Text("Sign in to restore").font(.headline)
-            Text("Sync this Mac's setup to your account, then pick a Mac to restore from.")
-                .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                .frame(maxWidth: 320)
-            Button("Sign In") { showAccount = true }.buttonStyle(.borderedProminent)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    // MARK: computer list
-
-    private var computerList: some View {
-        List(selection: $selectedComputerID) {
-            if sync.computers.isEmpty && !sync.isLoadingComputers {
-                Text("No Macs on this account yet").foregroundStyle(.secondary)
-            }
-            ForEach(sync.computers) { c in
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack {
-                        Text(c.name).fontWeight(.medium)
-                        if sync.isThisMac(c) {
-                            Text("this Mac").font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
-                                .background(Color.secondary.opacity(0.15)).clipShape(Capsule())
-                        }
-                    }
-                    Text("\(c.summary.defaults) defaults · \(c.summary.links) links · \(c.summary.apps) apps")
+    private var sourceList: some View {
+        List(selection: $selection) {
+            Section("Folders") {
+                if folders.isEmpty {
+                    Text("No Takeover folders found. Use Choose Folder to pick one.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                .tag(c.id)
+                ForEach(folders, id: \.rootPath) { location in
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text(location.provider == .folder
+                                 ? (location.rootPath as NSString).lastPathComponent
+                                 : location.provider.title)
+                                .fontWeight(.medium)
+                            if isCurrentStorage(location) { badge("in use") }
+                        }
+                        Text(location.rootPath).font(.caption).foregroundStyle(.secondary)
+                            .lineLimit(1).truncationMode(.middle)
+                    }
+                    .tag(RestoreSource.folder(location.rootPath))
+                }
+            }
+
+            if account.isSignedIn {
+                Section("Takeover Cloud") {
+                    if sync.computers.isEmpty && !sync.isLoadingComputers {
+                        Text("No Macs on this account yet").foregroundStyle(.secondary)
+                    }
+                    ForEach(sync.computers) { c in
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                Text(c.name).fontWeight(.medium)
+                                if sync.isThisMac(c) { badge("this Mac") }
+                            }
+                            Text("\(c.summary.defaults) defaults · \(c.summary.links) links · \(c.summary.apps) apps")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        .tag(RestoreSource.computer(c.id))
+                    }
+                }
             }
         }
         .listStyle(.sidebar)
         .overlay {
-            if sync.isLoadingComputers { ProgressView() }
+            if sync.isLoadingComputers && folders.isEmpty { ProgressView() }
         }
-        .onChange(of: selectedComputerID) { _, id in
-            Task { await loadProfile(id) }
+        .onChange(of: selection) { _, source in
+            Task { await loadProfile(source) }
+        }
+    }
+
+    private func badge(_ text: String) -> some View {
+        Text(text).font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+            .background(Color.secondary.opacity(0.15)).clipShape(Capsule())
+    }
+
+    private func isCurrentStorage(_ location: StorageLocation) -> Bool {
+        StorageLocation.load().map { $0.expandedRootPath == location.expandedRootPath } ?? false
+    }
+
+    private func folderLocation(_ rootPath: String) -> StorageLocation? {
+        folders.first { $0.rootPath == rootPath }
+    }
+
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose a folder that holds your Takeover settings (takeover-settings.yaml)"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let location = StorageLocation.forFolder(url.path)
+        if !folders.contains(where: { $0.expandedRootPath == location.expandedRootPath }) {
+            folders.insert(location, at: 0)
+        }
+        selection = .folder(folders.first { $0.expandedRootPath == location.expandedRootPath }!.rootPath)
+    }
+
+    private func refresh() {
+        let picked = folders
+        let detected = StorageLocation.detectExisting().map(\.location)
+        folders = detected + picked.filter { p in !detected.contains { $0.expandedRootPath == p.expandedRootPath } }
+        Task {
+            if account.isSignedIn { await sync.loadComputers() }
+            await loadProfile(selection)
         }
     }
 
@@ -118,16 +174,17 @@ struct RestoreView: View {
 
     @ViewBuilder
     private var detail: some View {
-        if let err = sync.computersError, sync.computers.isEmpty {
-            Text(err).foregroundStyle(.red).frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if selectedComputerID == nil {
-            Text("Select a Mac to see its saved setup")
+        if selection == nil {
+            Text("Select a folder or a Mac to see its settings")
                 .foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if loadingProfile {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let profile {
             VStack(spacing: 0) {
                 List {
+                    if profile.isEmpty {
+                        Text("Nothing to restore here yet.").foregroundStyle(.secondary)
+                    }
                     section("Mac Defaults", picked: $pickedDefaults, ids: profile.macDefaults.map(\.id)) {
                         ForEach(profile.macDefaults) { d in
                             row(id: d.id, picked: $pickedDefaults,
@@ -139,30 +196,69 @@ struct RestoreView: View {
                             row(id: l.id, picked: $pickedLinks, title: l.name, subtitle: "\(l.from) → \(l.to)")
                         }
                     }
+                    let installerEntries = profile.appInstallers ?? []
+                    section("Installers", picked: $pickedInstallers, ids: installerEntries.map(\.id)) {
+                        ForEach(installerEntries, id: \.id) { i in
+                            row(id: i.id, picked: $pickedInstallers, title: i.name, subtitle: i.path)
+                        }
+                    }
                     section("Applications", picked: $pickedApps, ids: profile.apps.map(\.id)) {
                         ForEach(profile.apps) { a in
                             row(id: a.id, picked: $pickedApps,
                                 title: a.name,
-                                subtitle: a.source == .brew ? "brew · \(a.cask ?? "—")" : a.source.rawValue)
+                                subtitle: (a.source == .brew ? "brew · \(a.cask ?? "—")" : a.source.rawValue)
+                                    + (a.alwaysInstall ? " · always install" : ""))
                         }
                     }
                 }
 
                 Divider()
                 HStack {
-                    if let summary { Text(summary).font(.caption).foregroundStyle(.secondary) }
+                    if let summary {
+                        Text(summary).font(.caption).foregroundStyle(.secondary)
+                    } else if let note = storageNote {
+                        Text(note).font(.caption).foregroundStyle(.secondary)
+                    }
                     Spacer()
                     if isRestoring { ProgressView().scaleEffect(0.7) }
-                    Button("Restore Selected") { Task { await restore(profile) } }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(isRestoring || (pickedDefaults.isEmpty && pickedLinks.isEmpty && pickedApps.isEmpty))
+                    Button("Apply Selected") { Task { await restore(profile) } }
+                        .disabled(isRestoring || nothingPicked)
+                    Button("Apply All") {
+                        pickAll(profile)
+                        Task { await restore(profile) }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isRestoring || profile.isEmpty)
+                    .help("Apply every Mac default, sync setting and installer listed here, and install the apps marked Always Install")
                 }
                 .padding(12)
             }
         } else {
-            Text("Couldn't load this Mac's setup").foregroundStyle(.secondary)
+            Text(loadError ?? "Couldn't read these settings").foregroundStyle(.secondary)
+                .multilineTextAlignment(.center).padding()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private var nothingPicked: Bool {
+        pickedDefaults.isEmpty && pickedLinks.isEmpty && pickedApps.isEmpty && pickedInstallers.isEmpty
+    }
+
+    /// Sync settings link into the storage folder, so restoring links from a
+    /// folder makes it this Mac's settings folder.
+    private var storageNote: String? {
+        guard case .folder(let root)? = selection, let location = folderLocation(root),
+              !isCurrentStorage(location) else { return nil }
+        return "Applying makes this folder where Takeover keeps your settings."
+    }
+
+    private func pickAll(_ profile: Profile) {
+        pickedDefaults = Set(profile.macDefaults.map(\.id))
+        pickedLinks = Set(profile.links.map(\.id))
+        // Apps install only when marked "always install"; others stay
+        // listed for the user to pick by hand.
+        pickedApps = Set(profile.apps.filter(\.alwaysInstall).map(\.id))
+        pickedInstallers = Set((profile.appInstallers ?? []).map(\.id))
     }
 
     @ViewBuilder
@@ -215,11 +311,14 @@ struct RestoreView: View {
         saveStateMessage = nil
         defer { isSavingState = false }
 
-        let profile = Profile.snapshot(
+        var profile = Profile.snapshot(
             defaults: currentDefaults.filter { !$0.value.isEmpty },
             links: currentLinks,
             apps: currentApps
         )
+        profile.appInstallers = SettingsManager.shared.settings?.appInstallers?.map {
+            Profile.AppInstallerEntry(name: $0.name, path: $0.path)
+        }
         await sync.push(profile)
 
         if let err = sync.lastPushError {
@@ -230,16 +329,27 @@ struct RestoreView: View {
         }
     }
 
-    private func loadProfile(_ id: Int?) async {
-        outcomes = [:]; summary = nil
-        guard let id else { profile = nil; return }
+    private func loadProfile(_ source: RestoreSource?) async {
+        outcomes = [:]; summary = nil; loadError = nil
+        guard let source else { profile = nil; return }
         loadingProfile = true
         defer { loadingProfile = false }
-        let p = await sync.profile(for: id, force: true)
-        profile = p
-        pickedDefaults = Set(p?.macDefaults.map(\.id) ?? [])
-        pickedLinks = []
-        pickedApps = Set(p?.apps.map(\.id) ?? [])
+        var loaded: Profile?
+        switch source {
+        case .folder(let root):
+            do {
+                let settings = try SettingsManager.read(folder: root)
+                loaded = Profile(settings: settings, catalog: MacDefaultCatalog.shared.entries)
+            } catch {
+                loadError = "Couldn't read the settings in \(root): \(error.localizedDescription)"
+            }
+        case .computer(let id):
+            loaded = await sync.profile(for: id, force: true)
+            if loaded == nil { loadError = sync.computersError }
+        }
+        guard selection == source else { return } // user moved on meanwhile
+        profile = loaded
+        if let loaded { pickAll(loaded) }
     }
 
     private func restore(_ profile: Profile) async {
@@ -248,13 +358,32 @@ struct RestoreView: View {
         defer { isRestoring = false }
         var ok = 0, fail = 0
 
-        for d in profile.macDefaults where pickedDefaults.contains(d.id) {
-            outcomes[d.id] = "… applying"
-            let model = MacDefault(name: d.name, domain: d.domain, key: d.key, type: d.type,
-                                   value: d.value, hostFlag: d.hostFlag, postCommand: d.postCommand)
-            MacDefaultInstaller.apply(macDefault: model)
-            upsertDefault(d)
-            outcomes[d.id] = "✓ applied"; ok += 1
+        // Links point into the settings folder, so a folder restore adopts
+        // that folder as this Mac's storage before linking anything.
+        if case .folder(let root)? = selection, let location = folderLocation(root), !isCurrentStorage(location) {
+            do {
+                try SettingsManager.shared.changeLocation(to: location)
+                NotificationCenter.default.post(name: .storageLocationChanged, object: nil)
+            } catch {
+                summary = "Couldn't switch to this folder: \(error.localizedDescription)"
+                return
+            }
+        }
+
+        // Same path as login/sync enforcement: only differing defaults are
+        // written, and each follow-up (killall Dock…) runs once.
+        let defaults = profile.macDefaults.filter { pickedDefaults.contains($0.id) }
+        let result = MacDefaultsEnforcer.enforce(defaults.map {
+            MacDefaultConfig(name: $0.name, domain: $0.domain, key: $0.key, type: $0.type, value: $0.value,
+                             hostFlag: $0.hostFlag, postCommand: $0.postCommand)
+        })
+        for d in defaults {
+            if result.failed.contains(d.name) {
+                outcomes[d.id] = "✗ couldn't write"; fail += 1
+            } else {
+                upsertDefault(d)
+                outcomes[d.id] = result.applied.contains(d.name) ? "✓ applied" : "✓ already set"; ok += 1
+            }
         }
 
         for l in profile.links where pickedLinks.contains(l.id) {
@@ -267,6 +396,11 @@ struct RestoreView: View {
             } catch {
                 outcomes[l.id] = "✗ \(error.localizedDescription)"; fail += 1
             }
+        }
+
+        for i in profile.appInstallers ?? [] where pickedInstallers.contains(i.id) {
+            upsertInstaller(i)
+            outcomes[i.id] = "✓ added"; ok += 1
         }
 
         for a in profile.apps where pickedApps.contains(a.id) {
@@ -304,6 +438,15 @@ struct RestoreView: View {
         }
     }
 
+    private func upsertInstaller(_ i: Profile.AppInstallerEntry) {
+        let name = i.name
+        let existing = (try? modelContext.fetch(FetchDescriptor<AppInstaller>(
+            predicate: #Predicate { $0.name == name }))) ?? []
+        let path = PathUtility.expandTildeToRealHome(i.path)
+        if let installer = existing.first { installer.path = path }
+        else { modelContext.insert(AppInstaller(name: i.name, path: path)) }
+    }
+
     private func upsertLink(_ l: Profile.LinkEntry) {
         let name = l.name
         let existing = (try? modelContext.fetch(FetchDescriptor<LinkItem>(
@@ -317,28 +460,5 @@ struct RestoreView: View {
 private extension Set {
     mutating func toggle(_ element: Element, on: Bool) {
         if on { insert(element) } else { remove(element) }
-    }
-}
-
-/// Shared account chip used in each tab's action bar.
-struct AccountButton: View {
-    @EnvironmentObject var account: AccountManager
-    @Binding var showAccount: Bool
-
-    var body: some View {
-        if let user = account.currentUser {
-            Menu {
-                Text(user.email)
-                Button("Sign Out") { account.signOut() }
-            } label: {
-                Label(user.username, systemImage: "person.crop.circle.fill")
-            }
-        } else {
-            Button {
-                showAccount = true
-            } label: {
-                Label("Sign In", systemImage: "person.crop.circle")
-            }
-        }
     }
 }

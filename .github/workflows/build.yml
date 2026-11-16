@@ -85,6 +85,11 @@ jobs:
             make package cli XCODE_FLAGS="$XCODE_FLAGS"
           fi
           codesign --verify --deep --strict --verbose=2 build/Build/Products/Release/Takeover.app
+          # The background agent that keeps Mac defaults applied must be embedded.
+          test -f build/Build/Products/Release/Takeover.app/Contents/Library/LaunchAgents/alexvaos.Takeover.DefaultsAgent.plist
+
+      - name: Unit tests
+        run: make test
 
       - name: Notarize
         if: env.HAS_SIGNING == 'true'

@@ -28,6 +28,19 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		AB7A00012F90000100A00001 /* Embed Launch Agents */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/Library/LaunchAgents;
+			dstSubfolderSpec = 1;
+			files = (
+			);
+			name = "Embed Launch Agents";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		AB6E98612D5D3CE400C351F6 /* Takeover.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Takeover.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB6E98742D5D3CE600C351F6 /* TakeoverTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TakeoverTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -62,9 +75,22 @@
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
+/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		AB7A00022F90000200A00002 /* PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			buildPhase = AB7A00012F90000100A00001 /* Embed Launch Agents */;
+			membershipExceptions = (
+				LaunchAgents/alexvaos.Takeover.DefaultsAgent.plist,
+			);
+		};
+/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AB6E98632D5D3CE400C351F6 /* Takeover */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				AB7A00022F90000200A00002 /* PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet */,
+			);
 			path = Takeover;
 			sourceTree = "<group>";
 		};
@@ -161,6 +187,7 @@
 				AB6E985D2D5D3CE400C351F6 /* Sources */,
 				AB6E985E2D5D3CE400C351F6 /* Frameworks */,
 				AB6E985F2D5D3CE400C351F6 /* Resources */,
+				AB7A00012F90000100A00001 /* Embed Launch Agents */,
 			);
 			buildRules = (
 			);
@@ -494,10 +521,10 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Takeover/Preview Content\"";
 				DEVELOPMENT_TEAM = K2F4FTM2XQ;
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Takeover/Info.plist;
@@ -524,10 +551,10 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Takeover/Preview Content\"";
 				DEVELOPMENT_TEAM = K2F4FTM2XQ;
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Takeover/Info.plist;

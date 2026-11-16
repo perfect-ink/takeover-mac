@@ -81,6 +81,19 @@ struct StorageLocation: Codable, Equatable {
         }
     }
 
+    /// The storage choice for a folder the user picked: iCloud Drive or
+    /// Dropbox when it's their Takeover folder, otherwise a plain folder.
+    static func forFolder(_ path: String) -> StorageLocation {
+        let resolved = URL(fileURLWithPath: PathUtility.expandTildeToRealHome(path)).resolvingSymlinksInPath().path
+        for provider in [StorageProvider.iCloud, .dropbox] where isAvailable(provider) {
+            let candidate = StorageLocation(provider: provider)
+            if URL(fileURLWithPath: candidate.expandedRootPath).resolvingSymlinksInPath().path == resolved {
+                return candidate
+            }
+        }
+        return StorageLocation(provider: .folder, folderPath: PathUtility.abbreviateRealHome(resolved))
+    }
+
     var expandedRootPath: String {
         PathUtility.expandTildeToRealHome(rootPath)
     }
@@ -116,6 +129,12 @@ struct StorageLocation: Codable, Equatable {
         let loaded = readPointerFile()
         cached = .some(loaded)
         return loaded
+    }
+
+    /// Forgets the cached choice so the next `load()` reads the pointer file
+    /// again; the background agent calls this when the app changes it.
+    static func reloadFromDisk() {
+        cached = nil
     }
 
     private static func readPointerFile() -> StorageLocation? {

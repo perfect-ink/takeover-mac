@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import SwiftData
 
 struct MacDefaultListView: View {
@@ -6,10 +7,20 @@ struct MacDefaultListView: View {
     @Query(sort: \MacDefault.name) private var macDefaults: [MacDefault]
     @State private var selection: MacDefault? = nil
     @State private var sidebarVisible = true
+    @ObservedObject private var agent = BackgroundAgent.shared
+    @State private var lastApplied: (names: [String], at: Date)?
 
     var body: some View {
         VStack(spacing: 0) {
             TabActionBar(title: "Mac Defaults") {
+                Toggle("Keep Applied", isOn: Binding(
+                    get: { agent.isTurnedOn },
+                    set: { agent.setTurnedOn($0) }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .help("Check these defaults at login and apply changes synced from your other Macs, even when Takeover is closed")
+
                 Button(action: { withAnimation { sidebarVisible.toggle() } }) {
                     Image(systemName: "sidebar.left")
                 }
@@ -26,8 +37,56 @@ struct MacDefaultListView: View {
                 }
             }
 
+            keepAppliedStatus
             macDefaultsContent
         }
+        .onAppear(perform: refreshStatus)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshStatus()
+        }
+    }
+
+    /// One line under the bar, only when there's something to say.
+    @ViewBuilder
+    private var keepAppliedStatus: some View {
+        if agent.needsApproval {
+            statusRow(icon: "exclamationmark.triangle.fill", color: .orange,
+                      text: "Allow Takeover in Login Items so it can keep these applied while it's closed.") {
+                Button("Open Login Items") { agent.openLoginItemsSettings() }
+                    .controlSize(.small)
+            }
+        } else if agent.isTurnedOn, let error = agent.lastError {
+            statusRow(icon: "exclamationmark.triangle.fill", color: .orange, text: error) { EmptyView() }
+        } else if agent.isTurnedOn, let lastApplied {
+            statusRow(icon: "checkmark.circle", color: .secondary,
+                      text: "Last applied \(lastApplied.at.formatted(date: .abbreviated, time: .shortened)): \(lastApplied.names.joined(separator: ", "))") {
+                EmptyView()
+            }
+        }
+    }
+
+    private func statusRow<Accessory: View>(icon: String, color: Color, text: String,
+                                            @ViewBuilder accessory: () -> Accessory) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .foregroundColor(color)
+                Text(text)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+                Spacer()
+                accessory()
+            }
+            .font(.caption)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+            Divider()
+        }
+    }
+
+    private func refreshStatus() {
+        agent.refresh()
+        lastApplied = MacDefaultsEnforcer.lastApplied
     }
 
     private var macDefaultsContent: some View {

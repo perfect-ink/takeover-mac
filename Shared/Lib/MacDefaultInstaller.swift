@@ -4,7 +4,13 @@ struct MacDefaultInstaller {
 
     @MainActor
     private static func readSystemValue(macDefault: MacDefault) -> String {
-        let result = Proc.run("/usr/bin/defaults", macDefault.readArguments)
+        readValue(arguments: macDefault.readArguments)
+    }
+
+    /// Runs `defaults` with these read arguments; "" when the key isn't set.
+    @MainActor
+    static func readValue(arguments: [String]) -> String {
+        let result = Proc.run("/usr/bin/defaults", arguments)
         let output = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         let notFound = !result.ok
             || output.isEmpty

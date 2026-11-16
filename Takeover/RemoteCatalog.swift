@@ -2,10 +2,13 @@ import Foundation
 import Yams
 
 /// Fetches a static catalog file published by takeover-api (served from its
-/// `public/catalog/` folder), caching it for a day and falling back to the
-/// stale cache and then a bundled copy when offline.
+/// `public/catalog/` folder), keeping a local copy for a week so the app
+/// doesn't hit the network on every launch, and falling back to the stale cache
+/// and then a bundled copy when offline.
 enum RemoteCatalog {
-    static let cacheDuration: TimeInterval = 86400 // 1 day
+    static let cacheDuration: TimeInterval = 7 * 86400 // 1 week
+    /// After a failed refresh, don't try again for this long (the stale copy is used).
+    static let retryAfterFailure: TimeInterval = 3600 // 1 hour
 
     static func catalogURL(_ fileName: String) -> URL {
         Config.apiBaseURL.appendingPathComponent("catalog").appendingPathComponent(fileName)
@@ -19,11 +22,19 @@ enum RemoteCatalog {
         _ type: T.Type,
         sources: [URL],
         cacheName: String,
-        bundled: URL? = nil
+        bundled: URL? = nil,
+        force: Bool = false
     ) async throws -> T {
         let cacheURL = cacheDirectory.appendingPathComponent(cacheName)
+        let failureMarker = cacheDirectory.appendingPathComponent(cacheName + ".failed")
 
-        if isFresh(cacheURL), let data = try? Data(contentsOf: cacheURL),
+        // A recent failed refresh with a usable cache: stay local, don't hammer the API.
+        if !force, isFresh(failureMarker, maxAge: retryAfterFailure),
+           let data = try? Data(contentsOf: cacheURL), let cached = try? decode(type, from: data) {
+            return cached
+        }
+
+        if !force, isFresh(cacheURL), let data = try? Data(contentsOf: cacheURL),
            let cached = try? decode(type, from: data) {
             return cached
         }
@@ -31,13 +42,16 @@ enum RemoteCatalog {
         var lastError: Error?
         for url in sources {
             do {
-                let (data, response) = try await URLSession.shared.data(from: url)
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 8 // fail over to the next source quickly
+                let (data, response) = try await URLSession.shared.data(for: request)
                 if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
                     throw URLError(.badServerResponse)
                 }
                 let decoded = try decode(type, from: data)
                 try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
                 try? data.write(to: cacheURL)
+                try? FileManager.default.removeItem(at: failureMarker)
                 return decoded
             } catch {
                 print("Catalog fetch failed for \(url): \(error)")
@@ -46,6 +60,8 @@ enum RemoteCatalog {
         }
 
         if let data = try? Data(contentsOf: cacheURL), let stale = try? decode(type, from: data) {
+            try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+            try? Data().write(to: failureMarker)
             return stale
         }
         if let bundled, let data = try? Data(contentsOf: bundled) {
@@ -68,11 +84,11 @@ enum RemoteCatalog {
             .appendingPathComponent("Takeover", isDirectory: true)
     }
 
-    private static func isFresh(_ url: URL) -> Bool {
+    private static func isFresh(_ url: URL, maxAge: TimeInterval = cacheDuration) -> Bool {
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
               let modified = attributes[.modificationDate] as? Date else {
             return false
         }
-        return Date().timeIntervalSince(modified) < cacheDuration
+        return Date().timeIntervalSince(modified) < maxAge
     }
 }

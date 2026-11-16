@@ -57,7 +57,7 @@ struct CLI {
         print("\(link.name)")
         print("  Status:  \(installed ? "installed ✓" : "not installed")")
         print("  From:    \(link.from)")
-        print("  To:      \(Config.backupPath)/\(link.to)")
+        print("  To:      \(Config.destinationPath(for: link.to))")
         if let defaults = link.defaults, !defaults.isEmpty {
             print("  Command: \(defaults)")
         }

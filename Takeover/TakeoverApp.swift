@@ -9,10 +9,14 @@ import SwiftUI
 import SwiftData
 import AppKit
 
-@main
+/// Launched through TakeoverMain, which runs the background defaults agent
+/// instead when asked to.
 struct TakeoverApp: App {
     @StateObject private var settingsManager = SettingsManager.shared
-    @State private var needsStorageSetup = !TakeoverApp.adoptDetectedStorage()
+    /// Asked once, on first open: until a storage choice is saved, the setup
+    /// sheet picks it (settings already found on this Mac are offered first).
+    /// After that, it's only changed from Settings.
+    @State private var needsStorageSetup = StorageLocation.load() == nil
     @StateObject private var account = AccountManager.shared
     @StateObject private var profileSync = ProfileSyncManager.shared
 
@@ -50,15 +54,23 @@ struct TakeoverApp: App {
                 .environmentObject(account)
                 .environmentObject(profileSync)
                 .task {
+                    // Independent startup work runs side by side instead of one after another.
+                    async let catalog: Void = Repository.shared.load()
+                    async let signIn: Void = {
+                        await account.refresh()
+                        if await account.isSignedIn { _ = await profileSync.registerThisMac() }
+                    }()
                     await checkPermissionsOnStartup()
-                    await Repository.shared.load()
-                    await account.refresh()
-                    if account.isSignedIn {
-                        await profileSync.registerThisMac()
-                    }
                     if !needsStorageSetup {
                         await loadFromStorage()
                     }
+                    _ = await (catalog, signIn)
+                    await startKeepingDefaultsApplied()
+                    // Push/pull with the account now, on activation, and
+                    // every few minutes (pull only for Takeover Cloud).
+                    profileSync.startAutoSync()
+                    // Copy /Library locations' local folders into the settings folder.
+                    await LocalStoreSync.keepBackedUp { !needsStorageSetup }
                 }
                 .sheet(isPresented: $needsStorageSetup) {
                     StorageSetupView(isFirstLaunch: true) {
@@ -67,7 +79,24 @@ struct TakeoverApp: App {
                     .interactiveDismissDisabled()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .storageLocationChanged)) { _ in
-                    Task { await loadFromStorage() }
+                    Task {
+                        await loadFromStorage()
+                        SettingsDiskWatcher.shared.start()
+                        // A new Mac that just picked its settings gets their
+                        // defaults now (the agent does this itself when running).
+                        BackgroundAgent.shared.refresh()
+                        if BackgroundAgent.shared.appShouldApply {
+                            MacDefaultsEnforcer.enforceFile(trigger: .fileChanged)
+                        }
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .settingsChangedOnDisk)) { note in
+                    guard let settings = note.object as? SettingsYaml else { return }
+                    Task { await replaceDatabase(with: settings) }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .settingsPulledFromAccount)) { note in
+                    guard let settings = note.object as? SettingsYaml else { return }
+                    Task { await replaceDatabase(with: settings) }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     // The user may have just granted access in System Settings —
@@ -76,27 +105,23 @@ struct TakeoverApp: App {
                 }
         }
         .modelContainer(sharedModelContainer)
+        .windowStyle(.hiddenTitleBar)
 
         Settings {
             StorageSetupView(isFirstLaunch: false)
         }
     }
 
-    /// First launch on this Mac: when exactly one existing settings folder
-    /// is found (e.g. synced through iCloud from another Mac), use it without
-    /// asking. Otherwise the setup sheet asks, or offers sign-in. Returns
-    /// whether a location is now saved.
-    private static func adoptDetectedStorage() -> Bool {
-        if StorageLocation.load() != nil { return true }
-        let found = StorageLocation.detectExisting()
-        guard found.count == 1 else { return false }
-        do {
-            try found[0].location.save()
-            print("Using existing Takeover settings at: \(found[0].location.rootPath)")
-            return true
-        } catch {
-            print("⚠️ Could not save storage location: \(error.localizedDescription)")
-            return false
+    /// Registers the background agent (unless turned off), watches the
+    /// settings folder, and, when the agent isn't running, checks the chosen
+    /// Mac defaults against the system once now.
+    @MainActor
+    private func startKeepingDefaultsApplied() async {
+        BackgroundAgent.shared.registerIfNeeded()
+        guard !needsStorageSetup else { return }
+        SettingsDiskWatcher.shared.start()
+        if BackgroundAgent.shared.appShouldApply {
+            MacDefaultsEnforcer.enforceFile(trigger: .startup)
         }
     }
 
@@ -161,7 +186,8 @@ struct TakeoverApp: App {
                     name: linkConfig.name,
                     from: expandTilde(linkConfig.from),
                     to: expandTilde(linkConfig.to),
-                    defaults: linkConfig.defaults ?? ""
+                    defaults: linkConfig.defaults ?? "",
+                    label: linkConfig.label ?? ""
                 )
                 context.insert(newItem)
             }
@@ -227,12 +253,78 @@ struct TakeoverApp: App {
                     name: config.name,
                     source: config.source,
                     cask: config.cask ?? "",
-                    masID: config.masID ?? ""
+                    masID: config.masID ?? "",
+                    alwaysInstall: config.alwaysInstall ?? false
                 ))
             }
         }
 
         try? context.save()
+    }
+
+    /// Makes the local lists match settings pulled from the account: rows
+    /// another Mac removed are deleted, changed rows are updated, new rows
+    /// are added. (`syncSettingsToDatabase` only ever adds.)
+    @MainActor
+    private func replaceDatabase(with settings: SettingsYaml) async {
+        let context = sharedModelContainer.mainContext
+
+        let links = Dictionary(settings.links.map { ($0.name, $0) }, uniquingKeysWith: { _, last in last })
+        for item in (try? context.fetch(FetchDescriptor<LinkItem>())) ?? [] {
+            if let config = links[item.name] {
+                item.from = expandTilde(config.from)
+                // Another Mac renamed this location (and moved the shared
+                // folder): repoint this Mac's link too, never just the To.
+                let to = expandTilde(config.to)
+                // If that fails, this Mac keeps its working To rather than
+                // stranding its link.
+                if item.to != to { try? LinkItemInstaller.changeDestination(of: item, to: to) }
+                item.defaults = config.defaults ?? ""
+            } else {
+                context.delete(item)
+            }
+        }
+
+        // Catalog rows stay (they're the list of available defaults); only
+        // their values follow the account. Custom rows not in the settings go.
+        let userDefaults = Dictionary((settings.macDefaults ?? []).map { ($0.name, $0) },
+                                      uniquingKeysWith: { _, last in last })
+        let catalogNames = Set(MacDefaultCatalog.shared.entries.map { $0.name })
+        for row in (try? context.fetch(FetchDescriptor<MacDefault>())) ?? [] {
+            if let config = userDefaults[row.name] {
+                row.value = config.value ?? ""
+                if let captured = config.capturedOSMajorVersion { row.capturedOSMajorVersion = captured }
+            } else if catalogNames.contains(row.name) {
+                row.value = ""
+            } else {
+                context.delete(row)
+            }
+        }
+
+        let installers = Dictionary((settings.appInstallers ?? []).map { ($0.name, $0) },
+                                    uniquingKeysWith: { _, last in last })
+        for installer in (try? context.fetch(FetchDescriptor<AppInstaller>())) ?? [] {
+            if let config = installers[installer.name] {
+                installer.path = expandTilde(config.path)
+            } else {
+                context.delete(installer)
+            }
+        }
+
+        let apps = Dictionary((settings.apps ?? []).map { ($0.name, $0) }, uniquingKeysWith: { _, last in last })
+        for entry in (try? context.fetch(FetchDescriptor<AppEntryModel>())) ?? [] {
+            if let config = apps[entry.name] {
+                entry.source = config.source
+                entry.cask = config.cask ?? ""
+                entry.masID = config.masID ?? ""
+                entry.alwaysInstall = config.alwaysInstall ?? false
+            } else {
+                context.delete(entry)
+            }
+        }
+
+        try? context.save()
+        await syncSettingsToDatabase(settings: settings)
     }
 
     private func expandTilde(_ path: String) -> String {

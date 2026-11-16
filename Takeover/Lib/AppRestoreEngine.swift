@@ -78,6 +78,22 @@ enum AppRestoreEngine {
         }
     }
 
+    /// Cask ids Homebrew has installed. Empty when Homebrew isn't installed.
+    /// Synchronous; call off the main thread.
+    static func installedCasks() -> Set<String> {
+        guard let brew = brewURL() else { return [] }
+        let r = Proc.run(brew.path, ["list", "--cask", "-1"])
+        guard r.ok else { return [] }
+        return Set(r.stdout.split(whereSeparator: \.isNewline).map { String($0).trimmingCharacters(in: .whitespaces) })
+    }
+
+    /// Removes a Homebrew cask. Synchronous; call off the main thread.
+    static func uninstallCask(_ cask: String) -> (success: Bool, message: String) {
+        guard let brew = brewURL() else { return (false, "Homebrew isn't installed") }
+        let r = Proc.run(brew.path, ["uninstall", "--cask", cask])
+        return r.ok ? (true, "Uninstalled \(cask)") : (false, String(r.combined.prefix(300)))
+    }
+
     /// Opens Terminal running the official Homebrew installer.
     static func launchHomebrewInstall() {
         let cmd = #"/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)""#

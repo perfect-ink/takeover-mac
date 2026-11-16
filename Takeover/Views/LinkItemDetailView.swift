@@ -161,6 +161,12 @@ struct LinkItemDetailView: View {
                         .foregroundColor(matches ? .secondary : .orange)
                     }
 
+                    if LinkItemInstaller.isSystemLocation(linkItem.from) {
+                        Label("System folder: Install copies it to your settings folder instead of linking it, so installers can still write here.", systemImage: "doc.on.doc")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
                     if let warning = missingSourceWarning {
                         Label(warning, systemImage: "exclamationmark.triangle.fill")
                             .font(.caption)

@@ -77,6 +77,13 @@ struct LinkItemInstaller {
             throw LinkInstallError.fullDiskAccessRequired
         }
 
+        // System folders are copied, never linked (see isSystemLocation).
+        if isSystemLocation(linkItem.from) {
+            try installByCopy(linkItem)
+            try runDefaults(linkItem)
+            return
+        }
+
         // Already linked to this destination: nothing to do.
         if isLinked(linkItem) { return }
 
@@ -151,12 +158,63 @@ struct LinkItemInstaller {
         print("Linked \(originalPath) -> \(backupPath)")
 
         try verifyLink(originalPath: originalPath, backupPath: backupPath)
+        try runDefaults(linkItem)
+    }
 
-        if !linkItem.defaults.isEmpty {
-            let result = Shell.runTrusted(linkItem.defaults)
-            if !result.ok {
-                throw LinkInstallError.defaultsCommandFailed(result.text)
+    private static func runDefaults(_ linkItem: LinkItem) throws {
+        guard !linkItem.defaults.isEmpty else { return }
+        let result = Shell.runTrusted(linkItem.defaults)
+        if !result.ok {
+            throw LinkInstallError.defaultsCommandFailed(result.text)
+        }
+    }
+
+    /// A location outside the user's home folder (/Library/...). Those are
+    /// written by installers running as root, which macOS doesn't let into the
+    /// settings folder (iCloud Drive, Dropbox, ~/Documents...): a link there made
+    /// Native Instruments' installers fail with "Operation not permitted". So
+    /// they're synced by copying, and the real folder stays in place.
+    static func isSystemLocation(_ from: String) -> Bool {
+        guard !from.isEmpty else { return false }
+        let path = PathUtility.expandTildeToRealHome(from)
+        let home = PathUtility.getRealHomeDirectory()
+        return path != home && !path.hasPrefix(home + "/")
+    }
+
+    /// Install for a system location: back this Mac's folder up into the
+    /// settings folder (replacing the old copy), or, on a Mac that doesn't have
+    /// it yet, copy the synced copy into place. A link left by an older build
+    /// is replaced by a real folder again.
+    @MainActor
+    private static func installByCopy(_ linkItem: LinkItem) throws {
+        let backupPath = Config.expandedDestinationPath(for: linkItem.to)
+        let originalPath = PathUtility.expandTildeToRealHome(linkItem.from)
+
+        // Undo an earlier link: put the synced copy back as a real folder.
+        if FileOps.isSymlink(originalPath) {
+            do {
+                try FileOps.remove(originalPath, allowPrivileged: true)
+                if FileOps.exists(backupPath) {
+                    try FileOps.copy(from: backupPath, to: originalPath, allowPrivileged: true)
+                }
+            } catch {
+                throw LinkInstallError.restoreFailed(error.localizedDescription)
             }
+            return
+        }
+
+        do {
+            if FileOps.exists(originalPath) {
+                try FileOps.makeDirectory((backupPath as NSString).deletingLastPathComponent, allowPrivileged: true)
+                try FileOps.copy(from: originalPath, to: backupPath, allowPrivileged: true)
+                print("Copied \(originalPath) -> \(backupPath)")
+            } else if FileOps.exists(backupPath) {
+                try FileOps.makeDirectory((originalPath as NSString).deletingLastPathComponent, allowPrivileged: true)
+                try FileOps.copy(from: backupPath, to: originalPath, allowPrivileged: true)
+                print("Restored \(originalPath) from \(backupPath)")
+            }
+        } catch {
+            throw LinkInstallError.moveToBackupFailed(error.localizedDescription)
         }
     }
 
@@ -230,7 +288,8 @@ struct LinkItemInstaller {
     /// True when installing would find both a real source and a real synced
     /// copy, so the user should pick which to keep (or merge).
     static func hasConflict(_ linkItem: LinkItem) -> Bool {
-        guard !linkItem.from.isEmpty, !linkItem.to.isEmpty, !isLinked(linkItem) else { return false }
+        guard !linkItem.from.isEmpty, !linkItem.to.isEmpty, !isLinked(linkItem),
+              !isSystemLocation(linkItem.from) else { return false }
         let original = PathUtility.expandTildeToRealHome(linkItem.from)
         let backup = Config.expandedDestinationPath(for: linkItem.to)
         return FileOps.exists(original) && !FileOps.isSymlink(original)
@@ -248,6 +307,14 @@ struct LinkItemInstaller {
     }
 
     static func status(_ linkItem: LinkItem) -> LinkStatus {
+        if isSystemLocation(linkItem.from) {
+            let fromPath = PathUtility.expandTildeToRealHome(linkItem.from)
+            // A link here is one an older build made; it needs reinstalling.
+            if FileOps.isSymlink(fromPath) { return .differentLocation }
+            let copied = FileOps.exists(fromPath) && !linkItem.to.isEmpty
+                && FileOps.exists(Config.expandedDestinationPath(for: linkItem.to))
+            return copied ? .installed : .notInstalled
+        }
         if isLinked(linkItem) { return .installed }
         guard !linkItem.from.isEmpty else { return .notInstalled }
         let fromPath = PathUtility.expandTildeToRealHome(linkItem.from)

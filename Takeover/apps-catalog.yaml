@@ -15,6 +15,11 @@
 # it is its own location, leaving out NTK and Service Center (licensing and
 # activation, which NI's installers and Native Access manage).
 #
+# Location names: "User ..." only for paths in ~/Library, "Root ..." only for
+# paths in /Library. Every other location is named for what it is ("SSH",
+# "Zsh Config", "FabFilter Documents"), with no User or Root prefix. The Mac
+# app keys locations by app and path, so renaming one offers Rename and Move.
+#
 # A path may use `*` for one path component's varying part, e.g. an app's
 # version in its name; the Mac app adds one location per match on that Mac
 # and puts the matched text where the location's name has its `*`.
@@ -32,11 +37,11 @@ os_recipies:
 apps:
   - name: SSH
     files:
-      - name: User SSH
+      - name: SSH
         path: ~/.ssh
   - name: Apple Music
     files:
-      - name: User Music
+      - name: Music Library
         path: ~/Music/Music
   - name: Cyberduck
     files:
@@ -111,63 +116,63 @@ apps:
         path: /Library/Application Support/Native Instruments/Supercharger GT
       - name: User Application Support
         path: ~/Library/Application Support/Native Instruments
-      - name: User Documents
+      - name: Native Instruments Documents
         path: ~/Documents/Native Instruments
 
   # Shells and command-line tools
   - name: Git
     files:
-      - name: User Git Config
+      - name: Git Config
         path: ~/.gitconfig
   - name: Zsh
     files:
-      - name: User Zsh Config
+      - name: Zsh Config
         path: ~/.zshrc
-      - name: User Zsh Profile
+      - name: Zsh Profile
         path: ~/.zprofile
   - name: Oh My Zsh
     files:
-      - name: User Oh My Zsh Custom
+      - name: Oh My Zsh Custom
         path: ~/.oh-my-zsh/custom
   - name: Bash
     files:
-      - name: User Bash Profile
+      - name: Bash Profile
         path: ~/.bash_profile
-      - name: User Bashrc
+      - name: Bashrc
         path: ~/.bashrc
   - name: Fish
     files:
-      - name: User Fish Config
+      - name: Fish Config
         path: ~/.config/fish
   - name: Starship
     files:
-      - name: User Starship Config
+      - name: Starship Config
         path: ~/.config/starship.toml
   - name: Tmux
     files:
-      - name: User Tmux Config
+      - name: Tmux Config
         path: ~/.tmux.conf
   - name: GitHub CLI
     files:
-      - name: User GitHub CLI Config
+      - name: GitHub CLI Config
         path: ~/.config/gh/config.yml
   - name: GnuPG
     files:
-      - name: User GnuPG Config
+      - name: GnuPG Config
         path: ~/.gnupg/gpg.conf
-      - name: User GnuPG Agent Config
+      - name: GnuPG Agent Config
         path: ~/.gnupg/gpg-agent.conf
 
   # Editors and developer tools
   - name: Vim
     files:
-      - name: User Vim Config
+      - name: Vim Config
         path: ~/.vimrc
-      - name: User Vim
+      - name: Vim Runtime
         path: ~/.vim
   - name: Neovim
     files:
-      - name: User Neovim Config
+      - name: Neovim Config
         path: ~/.config/nvim
   - name: Visual Studio Code
     files:
@@ -187,9 +192,9 @@ apps:
         path: ~/Library/Application Support/Cursor/User/snippets
   - name: Zed
     files:
-      - name: User Zed Settings
+      - name: Zed Settings
         path: ~/.config/zed/settings.json
-      - name: User Zed Keymap
+      - name: Zed Keymap
         path: ~/.config/zed/keymap.json
   - name: Sublime Text
     files:
@@ -231,39 +236,39 @@ apps:
         path: ~/Library/Application Support/iTerm2/DynamicProfiles
   - name: Ghostty
     files:
-      - name: User Ghostty Config
+      - name: Ghostty Config
         path: ~/.config/ghostty
       - name: User Application Support
         path: ~/Library/Application Support/com.mitchellh.ghostty
   - name: Alacritty
     files:
-      - name: User Alacritty Config
+      - name: Alacritty Config
         path: ~/.config/alacritty
   - name: kitty
     files:
-      - name: User Kitty Config
+      - name: Kitty Config
         path: ~/.config/kitty
   - name: WezTerm
     files:
-      - name: User WezTerm Config
+      - name: WezTerm Config
         path: ~/.wezterm.lua
   - name: Warp
     files:
-      - name: User Warp Config
+      - name: Warp Config
         path: ~/.warp
   - name: Hyper
     files:
-      - name: User Hyper Config
+      - name: Hyper Config
         path: ~/.hyper.js
 
   # Keyboard and automation
   - name: Karabiner-Elements
     files:
-      - name: User Karabiner-Elements Config
+      - name: Karabiner-Elements Config
         path: ~/.config/karabiner
   - name: Hammerspoon
     files:
-      - name: User Hammerspoon Config
+      - name: Hammerspoon Config
         path: ~/.hammerspoon
   - name: Keyboard Maestro
     files:
@@ -280,18 +285,18 @@ apps:
   # Themes live inside each Live app (Live 10 and later: Themes; Live 9:
   # Skins). The `*` matches every installed version and edition, and the Mac
   # app adds one location per match, putting the matched text where the
-  # name has its `*` ("Root Ableton Live 12 Suite Themes").
+  # name has its `*` ("Ableton Live 12 Suite Themes").
   - name: Ableton Live
     files:
-      - name: User Ableton Live Music
+      - name: Ableton Live Music
         path: ~/Music/Ableton
       - name: User Ableton Live Application Support
         path: ~/Library/Application Support/Ableton/Library
       - name: User Ableton Live Preferences
         path: ~/Library/Preferences/Ableton
-      - name: Root Ableton Live * Themes
+      - name: Ableton Live * Themes
         path: /Applications/Ableton Live *.app/Contents/App-Resources/Themes
-      - name: Root Ableton Live * Skins
+      - name: Ableton Live * Skins
         path: /Applications/Ableton Live *.app/Contents/App-Resources/Skins
   - name: Logic Pro
     files:
@@ -303,11 +308,11 @@ apps:
         path: ~/Library/Application Support/REAPER
   - name: Bitwig Studio
     files:
-      - name: User Bitwig Studio Documents
+      - name: Bitwig Studio Documents
         path: ~/Documents/Bitwig Studio
   - name: FL Studio
     files:
-      - name: User FL Studio Documents
+      - name: FL Studio Documents
         path: ~/Documents/Image-Line
 
   # Design and 3D
@@ -346,7 +351,7 @@ apps:
         path: ~/Library/Application Support/Arturia
   - name: FabFilter
     files:
-      - name: User FabFilter Documents
+      - name: FabFilter Documents
         path: ~/Documents/FabFilter
       - name: User FabFilter Application Support
         path: ~/Library/Application Support/FabFilter
@@ -356,17 +361,17 @@ apps:
         path: /Library/Application Support/Valhalla DSP, LLC
   - name: iZotope
     files:
-      - name: User Documents
+      - name: iZotope Documents
         path: ~/Documents/iZotope
-      - name: Application Support
+      - name: User Application Support
         path: ~/Library/Application Support/iZotope
   - name: Reason Studios
     files:
       - name: Reason Studios Music
         path: ~/Music/Reason Studios
-      - name: Propellerhead Software Application Support
+      - name: User Propellerhead Software Application Support
         path: ~/Library/Application Support/Propellerhead Software
-      - name: Reason Studios Application Support
+      - name: User Reason Studios Application Support
         path: ~/Library/Application Support/Reason Studios
   # Waves keeps its licenses in /Library/Application Support/Waves/Licenses,
   # which stays out; this is the per-user Waves Audio folder only.

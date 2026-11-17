@@ -132,9 +132,9 @@ class Repository {
         }
     }
 
-    /// "Root Ableton Live * Themes" for "/Applications/Ableton Live 12
+    /// "Ableton Live * Themes" for "/Applications/Ableton Live 12
     /// Suite.app/..." matched by "/Applications/Ableton Live *.app/..." is
-    /// "Root Ableton Live 12 Suite Themes": each `*` in the name takes the
+    /// "Ableton Live 12 Suite Themes": each `*` in the name takes the
     /// text the path's `*`s matched, in order.
     static func wildcardName(_ name: String, pattern: String, path: String) -> String {
         let regex = "^" + pattern.components(separatedBy: "*")

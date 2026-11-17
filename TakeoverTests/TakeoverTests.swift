@@ -197,9 +197,9 @@ struct TakeoverTests {
 
     @Test func wildcardLocationsExpandPerMatch() {
         let app = AppConfig(name: "Ableton Live", files: [
-            FileConfig(path: "~/Music/Ableton", name: "User Ableton Live Music"),
-            FileConfig(path: "/Applications/Ableton Live *.app/Contents/App-Resources/Themes", name: "Root Ableton Live * Themes"),
-            FileConfig(path: "/Applications/Ableton Live *.app/Contents/App-Resources/Skins", name: "Root Ableton Live * Skins"),
+            FileConfig(path: "~/Music/Ableton", name: "Ableton Live Music"),
+            FileConfig(path: "/Applications/Ableton Live *.app/Contents/App-Resources/Themes", name: "Ableton Live * Themes"),
+            FileConfig(path: "/Applications/Ableton Live *.app/Contents/App-Resources/Skins", name: "Ableton Live * Skins"),
         ], defaults: nil)
         let installed = [
             "/Applications/Ableton Live 12 Suite.app/Contents/App-Resources/Themes",
@@ -210,7 +210,7 @@ struct TakeoverTests {
         }[0].files
         #expect(expanded.map(\.path) == ["~/Music/Ableton"] + installed.sorted())
         #expect(expanded.map(\.name) == [
-            "User Ableton Live Music", "Root Ableton Live 10 Standard Themes", "Root Ableton Live 12 Suite Themes",
+            "Ableton Live Music", "Ableton Live 10 Standard Themes", "Ableton Live 12 Suite Themes",
         ])
     }
 

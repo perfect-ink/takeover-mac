@@ -12,8 +12,8 @@ Ableton Live's themes, which live inside each Live app:
 When the catalog loads (`Repository.load`), `Repository.expandingWildcards`
 turns each such location into one location per matching path on this Mac
 (glob(3)), in sorted order. Each `*` in the location's name takes the text the
-path's `*` matched, so "Root Ableton Live * Themes" becomes
-"Root Ableton Live 12 Suite Themes" for Live 12 Suite. A pattern with no
+path's `*` matched, so "Ableton Live * Themes" becomes
+"Ableton Live 12 Suite Themes" for Live 12 Suite. A pattern with no
 match on this Mac is left out; nothing with a `*` ever becomes a sync setting.
 
 The expanded locations are ordinary locations from then on: Sync Settings
@@ -21,7 +21,7 @@ seeds them, and Install moves the folder into the settings folder and links
 it, always as a symlink. Because they're outside the home folder, they link
 into `/Users/Shared/Takeover` like /Library locations (see
 [local_store_for_system_locations.md](local_store_for_system_locations.md)).
-Each Live version gets its own folder ("Ableton Live/Root Ableton Live 12
+Each Live version gets its own folder ("Ableton Live/Ableton Live 12
 Suite Themes"), since each version ships its own built-in themes.
 
 Who can view or change it: same as any catalog location. The recipes live in

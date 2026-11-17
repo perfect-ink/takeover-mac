@@ -259,6 +259,16 @@ struct TakeoverTests {
         #expect(!LinkItemInstaller.sourceExists("/Library/Application Support/takeover-test-\(UUID().uuidString)"))
     }
 
+    /// A dangling link is broken (shown red), not missing (greyed out).
+    @Test func brokenLinkCountsAsPresentNotMissing() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("takeover-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let link = dir.appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: dir.appendingPathComponent("gone").path)
+        #expect(LinkItemInstaller.sourceExists(link.path))
+    }
+
     // MARK: - Keeping Mac defaults applied
 
     private func catalogEntry(_ name: String, domain: String, key: String, type: String,

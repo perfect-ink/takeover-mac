@@ -296,6 +296,7 @@ struct AppRecipeRow: View {
                             }
                         }
                         .padding(.leading, 8)
+                        .opacity(LinkItemInstaller.sourceExists(app.files[index].path) ? 1 : 0.45)
                     }
                 }
             }

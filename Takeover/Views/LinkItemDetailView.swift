@@ -272,6 +272,11 @@ struct LinkItemDetailView: View {
             }
         }
         .card(enabled: embedded, padding: 16)
+        // In an app's list of locations, one whose From isn't on this Mac is
+        // greyed out, like apps not on this Mac in the sidebar. It stays usable
+        // (Install links the synced copy). A broken link isn't missing: it keeps
+        // full color and its red icon.
+        .opacity(embedded && !LinkItemInstaller.sourceExists(linkItem.from) ? 0.45 : 1)
         .padding(embedded ? 0 : 24)
         .frame(minWidth: embedded ? 0 : 400)
         .alert(

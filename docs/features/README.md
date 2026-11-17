@@ -6,7 +6,7 @@ One file per feature; see docs/rules/feature-docs.md.
 - [sync_destination_folders.md](sync_destination_folders.md): each app syncs into its own folder, one subfolder per location, named like the location (names from the API catalog).
 - [picked_source_destination.md](picked_source_destination.md): To is named after the folder picked for From.
 - [takeover_cloud_sign_in.md](takeover_cloud_sign_in.md): sign-in is asked for only when Takeover Cloud is chosen as storage.
-- [self_service_apps.md](self_service_apps.md): the Applications tab's app cards (Install, or Open and Uninstall) and the Always install flag.
+- [self_service_apps.md](self_service_apps.md): the Applications tab's app cards (Install, or Open and Uninstall), the Always install flag, and dragging installers into Takeover/Apps.
 - [storage_choice.md](storage_choice.md): where settings live, asked once on first open.
 - [restore.md](restore.md): restore a Mac from any Takeover folder or Takeover Cloud Mac; Apply All.
 - [installed_apps_filter.md](installed_apps_filter.md): Sync Settings shows only apps on this Mac, with a Show All toggle.

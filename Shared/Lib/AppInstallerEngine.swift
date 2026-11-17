@@ -69,7 +69,7 @@ struct AppInstallerEngine {
                 case "zip": return DiscoveredApp(name: baseName, fileURL: url, fileType: .zip)
                 case "dmg": return DiscoveredApp(name: baseName, fileURL: url, fileType: .dmg)
                 case "app": return DiscoveredApp(name: baseName, fileURL: url, fileType: .app)
-                case "pkg": return DiscoveredApp(name: baseName, fileURL: url, fileType: .pkg)
+                case "pkg", "mpkg": return DiscoveredApp(name: baseName, fileURL: url, fileType: .pkg)
                 default: return nil
                 }
             }

@@ -240,6 +240,39 @@ struct TakeoverTests {
         #expect(AppCard.subtitle(for: .installer(pkg), installedVersion: "") == "Installed")
     }
 
+    @Test func droppedInstallerNamesNeverOverwrite() {
+        #expect(InstallerImporter.plan(fileName: "Arc.dmg", size: 10, existing: [:]) == .copy(as: "Arc.dmg"))
+        #expect(InstallerImporter.plan(fileName: "Arc.dmg", size: 10, existing: ["arc.dmg": 10]) == .alreadyThere)
+        #expect(InstallerImporter.plan(fileName: "Arc.dmg", size: 10, existing: ["Arc.dmg": 12]) == .copy(as: "Arc 2.dmg"))
+        #expect(InstallerImporter.plan(fileName: "Arc.dmg", size: 10, existing: ["Arc.dmg": 12, "Arc 2.dmg": 11]) == .copy(as: "Arc 3.dmg"))
+        #expect(InstallerImporter.isInstaller(URL(fileURLWithPath: "/tmp/Tool.MPKG")))
+        #expect(!InstallerImporter.isInstaller(URL(fileURLWithPath: "/tmp/notes.txt")))
+        #expect(InstallerImporter.defaultFolder(settingsRoot: "~/Takeover") == "~/Takeover/Apps")
+    }
+
+    @Test func droppedInstallersAreCopiedIntoTheFolder() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("takeover-import-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: root) }
+        let downloads = root.appendingPathComponent("Downloads")
+        try fm.createDirectory(at: downloads, withIntermediateDirectories: true)
+        let dmg = downloads.appendingPathComponent("Arc.dmg")
+        let txt = downloads.appendingPathComponent("notes.txt")
+        try Data("dmg".utf8).write(to: dmg)
+        try Data("txt".utf8).write(to: txt)
+        let folder = root.appendingPathComponent("Takeover/Apps").path
+
+        let first = InstallerImporter.importFiles([dmg, txt], into: folder)
+        #expect(first.copied == ["Arc.dmg"])
+        #expect(first.unsupported == ["notes.txt"])
+        #expect(fm.fileExists(atPath: dmg.path))
+        #expect(AppInstallerEngine.scan(at: folder).map(\.name) == ["Arc"])
+
+        let again = InstallerImporter.importFiles([dmg], into: folder)
+        #expect(again.copied.isEmpty)
+        #expect(again.alreadyThere == ["Arc.dmg"])
+    }
+
     @Test func touchIconLinksResolveAgainstThePage() {
         let html = #"<head><link rel="icon" href="/favicon.ico"><link href='/img/touch.png' rel="apple-touch-icon" sizes="180x180"></head>"#
         let links = AppIconLoader.touchIconLinks(in: html, base: URL(string: "https://example.com/app/")!)

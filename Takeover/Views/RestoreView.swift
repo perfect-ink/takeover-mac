@@ -41,7 +41,11 @@ struct RestoreView: View {
     @State private var outcomes: [String: String] = [:]   // row id -> status text
     @State private var summary: String?
 
-    private var localFolder: String? { installers.first?.path }
+    /// The Applications tab's installers folder, or the Takeover folder's Apps.
+    private var localFolder: String? {
+        if let path = installers.first?.path, !path.isEmpty { return path }
+        return InstallerImporter.defaultFolder()
+    }
 
     var body: some View {
         VStack(spacing: 0) {

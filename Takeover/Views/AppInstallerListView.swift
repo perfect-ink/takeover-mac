@@ -23,7 +23,7 @@ struct AppInstallerListView: View {
         }
         .onAppear {
             if installers.isEmpty {
-                let item = AppInstaller(name: "Apps", path: "")
+                let item = AppInstaller(name: "Apps", path: InstallerImporter.defaultFolder())
                 modelContext.insert(item)
             }
         }
@@ -46,7 +46,8 @@ struct AppInstallerListView: View {
 /// The Applications tab's Self Service style catalog: a grid of app cards.
 /// An app that isn't installed shows Install; an installed one shows Open and
 /// Uninstall. Cards come from the installers folder and from Homebrew apps on
-/// the restore list below (see `AppCard`).
+/// the restore list below (see `AppCard`). Installer files dragged onto the
+/// tab are copied into the installers folder (see `InstallerImporter`).
 struct AppInstallerContentView: View {
     @Bindable var installer: AppInstaller
     var onSave: (() -> Void)?
@@ -67,6 +68,9 @@ struct AppInstallerContentView: View {
     /// installer or Homebrew (see `AppIconLoader`).
     @State private var fetchedIcons: [String: NSImage] = [:]
     @State private var saveTask: Task<Void, Never>?
+    @State private var isDropTargeted = false
+    @State private var isImporting = false
+    @State private var importMessage: String? = nil
 
     private var cards: [AppCard] {
         AppCard.cards(installers: discoveredApps, restoreList: restoreEntries.map {
@@ -80,6 +84,13 @@ struct AppInstallerContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             TabActionBar(title: "Applications") {
+                if let importMessage {
+                    Text(importMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                if isImporting { ProgressView().controlSize(.small) }
                 TextField("Installers folder, e.g. ~/Downloads/Apps", text: $installer.path)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
@@ -101,9 +112,7 @@ struct AppInstallerContentView: View {
                     Image(systemName: "square.grid.2x2")
                         .font(.system(size: 32))
                         .foregroundStyle(.secondary)
-                    Text(installer.path.isEmpty
-                         ? "Pick a folder of installers (.dmg, .zip, .pkg or .app) with Browse, or add Homebrew apps to the restore list below."
-                         : "No installers found in that folder.")
+                    Text("Drag installers (.dmg, .zip, .pkg or .app) here to add them to the installers folder, or add Homebrew apps to the restore list below.")
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 360)
@@ -134,6 +143,14 @@ struct AppInstallerContentView: View {
                 .task(id: cards.map(\.id)) { await loadIcons(for: cards) }
             }
         }
+        .overlay { if isDropTargeted { dropHighlight } }
+        .animation(.easeOut(duration: 0.15), value: isDropTargeted)
+        .dropDestination(for: URL.self) { urls, _ in
+            let files = urls.filter(\.isFileURL)
+            guard !files.isEmpty else { return false }
+            importInstallers(files)
+            return true
+        } isTargeted: { isDropTargeted = $0 }
         .alert("Couldn't finish", isPresented: Binding(
             get: { installError != nil },
             set: { if !$0 { installError = nil } }
@@ -155,7 +172,30 @@ struct AppInstallerContentView: View {
             Text("The app is removed from this Mac. Its settings stay where they are.")
         }
         .onChange(of: installer.path) { _, _ in scheduleSave() }
-        .onAppear { refresh() }
+        .onAppear {
+            if installer.path.trimmingCharacters(in: .whitespaces).isEmpty {
+                installer.path = InstallerImporter.defaultFolder()
+            }
+            refresh()
+        }
+    }
+
+    /// Shown over the tab while installer files are dragged over it.
+    private var dropHighlight: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.accentColor.opacity(0.08))
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
+            Label("Drop to add to \((installer.path as NSString).lastPathComponent)", systemImage: "square.and.arrow.down")
+                .font(.headline)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.regularMaterial, in: Capsule())
+        }
+        .padding(8)
+        .allowsHitTesting(false)
+        .transition(.opacity)
     }
 
     // MARK: Install state
@@ -230,6 +270,30 @@ struct AppInstallerContentView: View {
         if panel.runModal() == .OK, let url = panel.url {
             installer.path = url.path
             scheduleSave()
+            refresh()
+        }
+    }
+
+    /// Copies dropped installers into the installers folder (Takeover/Apps
+    /// unless another folder was picked), then rescans so their cards appear.
+    private func importInstallers(_ urls: [URL]) {
+        if installer.path.trimmingCharacters(in: .whitespaces).isEmpty {
+            installer.path = InstallerImporter.defaultFolder()
+        }
+        let folder = installer.path
+        isImporting = true
+        importMessage = nil
+        Task {
+            let result = await Task.detached { InstallerImporter.importFiles(urls, into: folder) }.value
+            isImporting = false
+            if !result.copied.isEmpty {
+                importMessage = result.copied.count == 1
+                    ? "Added \(result.copied[0])"
+                    : "Added \(result.copied.count) installers"
+            } else if !result.alreadyThere.isEmpty {
+                importMessage = "Already in \((folder as NSString).lastPathComponent)"
+            }
+            if let problem = result.problem { installError = problem }
             refresh()
         }
     }

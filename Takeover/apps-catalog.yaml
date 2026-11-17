@@ -26,7 +26,12 @@
 #
 # `os_recipies` keeps the old api/repository.json spelling; the Mac app
 # decodes that key.
-version: 1
+#
+# `version` is this catalog's revision. Raise it by one in every change to
+# this file: the Mac app keeps whichever copy (fetched, cached or bundled) has
+# the highest version, and CI refuses a change that doesn't raise it
+# (bin/check-catalog-versions).
+version: 2
 
 os_recipies:
   - name: Dock Orientation

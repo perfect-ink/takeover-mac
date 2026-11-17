@@ -2,6 +2,7 @@
 #
 #   push to main / manual run  -> Takeover.dmg as a workflow artifact (Actions tab)
 #   push a tag like v1.2.0     -> GitHub Release with Takeover-1.2.0.dmg and the CLI
+#                                 (`make release` bumps VERSION and pushes the tag)
 #   publish a release          -> same files attached to that release
 #
 # Without signing secrets the app is signed ad hoc (same as `make package` on a
@@ -42,25 +43,26 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.release.tag_name || '' }}
+          # The build number is the commit count (see the Makefile).
+          fetch-depth: 0
 
       - name: Show Xcode
         run: xcodebuild -version
 
       - name: Version
         id: version
+        # The app version is the VERSION file (the Makefile passes it to
+        # xcodebuild); a release tag must match it, so `make release` is the
+        # way to cut one.
         run: |
-          if [[ -n "$TAG" ]]; then
-            VERSION="${TAG#v}"
-          else
-            VERSION="0.0.0-${GITHUB_SHA::7}"
+          VERSION="$(cat VERSION)"
+          if [[ -n "$TAG" && "$TAG" != "v$VERSION" ]]; then
+            echo "::error::Tag $TAG doesn't match VERSION ($VERSION). Cut releases with 'make release'."
+            exit 1
           fi
+          if [[ -z "$TAG" ]]; then VERSION="$VERSION-${GITHUB_SHA::7}"; fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          # MARKETING_VERSION must be numeric; untagged builds keep the project's.
-          if [[ "$VERSION" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
-            echo "XCODE_FLAGS=MARKETING_VERSION=$VERSION CURRENT_PROJECT_VERSION=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
-          else
-            echo "XCODE_FLAGS=CURRENT_PROJECT_VERSION=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
-          fi
+          make --no-print-directory version
 
       - name: Import Developer ID certificate
         if: env.HAS_SIGNING == 'true'
@@ -86,10 +88,10 @@ jobs:
           make setup
           if [[ "$HAS_SIGNING" == "true" ]]; then
             SIGN="CODE_SIGN_IDENTITY=Developer\ ID\ Application CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=$TEAM_ID PROVISIONING_PROFILE_SPECIFIER= OTHER_CODE_SIGN_FLAGS=--timestamp"
-            make package cli SIGN_FLAGS="$SIGN" XCODE_FLAGS="$XCODE_FLAGS"
+            make package cli SIGN_FLAGS="$SIGN"
             codesign --sign "Developer ID Application" --timestamp build/Takeover.dmg
           else
-            make package cli XCODE_FLAGS="$XCODE_FLAGS"
+            make package cli
           fi
           codesign --verify --deep --strict --verbose=2 build/Build/Products/Release/Takeover.app
           # The background agent that keeps Mac defaults applied must be embedded.

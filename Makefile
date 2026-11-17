@@ -33,14 +33,21 @@ else
 SIGN_FLAGS  := CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER=
 endif
 
-# Extra xcodebuild settings for Release builds, e.g. CI passes
-# MARKETING_VERSION=1.2.0 or a Developer ID signing identity here.
+# The app's version is VERSION (semver), and its build number is the commit
+# count, so every build says exactly what it is. `make release` bumps VERSION;
+# nothing else does (docs/rules/versioning.md).
+VERSION       := $(shell cat VERSION)
+BUILD_NUMBER  := $(shell git rev-list --count HEAD 2>/dev/null || echo 1)
+VERSION_FLAGS := MARKETING_VERSION=$(VERSION) CURRENT_PROJECT_VERSION=$(BUILD_NUMBER)
+
+# Extra xcodebuild settings for Release builds, e.g. a Developer ID signing
+# identity from CI.
 XCODE_FLAGS ?=
 
 .DEFAULT_GOAL := all
 
 .PHONY: all help setup dev open close test build install uninstall reinstall \
-        package cli install-cli verify-sign reset-tcc catalog clean
+        package cli install-cli verify-sign reset-tcc catalog clean version release
 
 ##@ Common
 
@@ -69,7 +76,7 @@ setup: ## Set up the environment if needed: check the toolchain, resolve SPM dep
 dev: ## Build a debug .app (replacing any previous one) and open it.
 	-killall $(APP) 2>/dev/null; true
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration Debug \
-		-derivedDataPath $(BUILD_DIR) -quiet build
+		-derivedDataPath $(BUILD_DIR) -quiet build $(VERSION_FLAGS)
 	@touch "$(DEV_APP)"; $(LSREGISTER) -f "$(DEV_APP)" 2>/dev/null; true
 	open "$(DEV_APP)"
 
@@ -86,14 +93,14 @@ close: ## Kill the running app. Only if native.
 # boots the full app and is slow/flaky for a plain `make test`.)
 test: ## Run the unit-test suite.
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration Debug \
-		-destination 'platform=macOS' -only-testing:TakeoverTests test $(SIGN_FLAGS)
+		-destination 'platform=macOS' -only-testing:TakeoverTests test $(SIGN_FLAGS) $(VERSION_FLAGS)
 	@echo "Tests completed successfully!"
 
 ##@ Production
 
 build: catalog ## Build for production (Release), no install. Refreshes the offline catalogs first.
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration Release \
-		-derivedDataPath $(BUILD_DIR) -quiet build $(SIGN_FLAGS) $(XCODE_FLAGS)
+		-derivedDataPath $(BUILD_DIR) -quiet build $(SIGN_FLAGS) $(VERSION_FLAGS) $(XCODE_FLAGS)
 	@echo "==> $(RELEASE_APP)"
 
 install: build ## Build for production and install to /Applications.
@@ -132,7 +139,7 @@ package: build ## Build for production and package it as build/Takeover.dmg.
 
 cli: ## Build the `takeover` command-line tool (TakeoverCLI target).
 	xcodebuild -project $(PROJECT) -scheme $(CLI_SCHEME) -configuration Release \
-		-derivedDataPath $(BUILD_DIR) -quiet build $(SIGN_FLAGS) $(XCODE_FLAGS)
+		-derivedDataPath $(BUILD_DIR) -quiet build $(SIGN_FLAGS) $(VERSION_FLAGS) $(XCODE_FLAGS)
 	@echo "==> $(CLI_SRC)"
 
 install-cli: cli ## Install the CLI to $(PREFIX)/bin.
@@ -157,22 +164,47 @@ reset-tcc: ## Forget every TCC grant for the app (re-prompt from a clean slate).
 	-tccutil reset AppleEvents $(BUNDLE_ID)
 	@echo "TCC grants reset for $(BUNDLE_ID)."
 
+##@ Release
+
+version: ## Print the app version and build number.
+	@echo "$(VERSION) ($(BUILD_NUMBER))"
+
+# Bumps VERSION (BUMP=patch, minor or major; patch by default), commits it,
+# tags vX.Y.Z and pushes both. The tag makes CI build and publish the GitHub
+# Release. Patch for fixes, minor for new features and UI changes; a major
+# bump is Alex's call.
+BUMP ?= patch
+release: ## Bump VERSION (BUMP=patch|minor|major), tag vX.Y.Z and push; CI publishes it.
+	@case "$(BUMP)" in patch|minor|major) ;; *) echo "error: BUMP must be patch, minor or major"; exit 1;; esac
+	@test -z "$$(git status --porcelain)" || { echo "error: commit or stash your changes first"; exit 1; }
+	@test "$$(git rev-parse --abbrev-ref HEAD)" = main || { echo "error: release from main"; exit 1; }
+	@git fetch -q origin main && git merge-base --is-ancestor origin/main HEAD || { echo "error: pull origin/main first"; exit 1; }
+	@new=$$(awk -F. -v b="$(BUMP)" '{ if (b == "major") print $$1+1 ".0.0"; else if (b == "minor") print $$1 "." $$2+1 ".0"; else print $$1 "." $$2 "." $$3+1 }' VERSION); \
+	if git rev-parse -q --verify "refs/tags/v$$new" >/dev/null; then echo "error: tag v$$new already exists"; exit 1; fi; \
+	echo "$$new" > VERSION && git add VERSION && git commit -q -m "Release v$$new" && \
+	git tag -a "v$$new" -m "Takeover $$new" && git push origin main "v$$new" && \
+	echo "Released v$$new. CI builds and publishes it."
+
 ##@ Maintenance
 
 # Recipes live only in takeover-site's public/catalog/*.yaml. The app fetches
 # them at runtime; the bundled copies are just the offline fallback, and every
-# production build refreshes them first (keeping the old copy if
-# takeoverapp.site can't be reached).
+# production build refreshes them first. Each catalog has a `version` (its
+# revision), so the bundled copy is only replaced by a newer or equal one,
+# and kept if takeoverapp.site can't be reached.
 CATALOG_URL := https://takeoverapp.site/catalog
 
 catalog: ## Refresh the bundled offline recipe catalogs from takeoverapp.site.
 	@mkdir -p $(BUILD_DIR)
 	@for pair in mac-defaults:mac-defaults-catalog apps:apps-catalog; do \
 		src=$${pair%%:*}; dst="$(APP)/$${pair##*:}.yaml"; tmp="$(BUILD_DIR)/download-$$src.yaml"; \
-		if ! curl -fsSL "$(CATALOG_URL)/$$src.yaml" -o "$$tmp"; then echo "warning: couldn't fetch $$src.yaml; keeping the bundled copy"; \
-		elif [ "$$(grep -c '^ *- name:' "$$tmp")" -lt "$$(grep -c '^ *- name:' "$$dst")" ]; then \
-			echo "warning: the site's $$src.yaml has fewer recipes than the bundled copy (not deployed yet?); keeping the bundled copy"; \
-		else mv "$$tmp" "$$dst"; echo "Updated $$dst"; fi; \
+		if ! curl -fsSL "$(CATALOG_URL)/$$src.yaml" -o "$$tmp"; then echo "warning: couldn't fetch $$src.yaml; keeping the bundled copy"; continue; fi; \
+		new=$$(sed -n 's/^version: *//p' "$$tmp"); old=$$(sed -n 's/^version: *//p' "$$dst"); \
+		if ! [ "$$new" -ge 1 ] 2>/dev/null; then \
+			echo "warning: the site's $$src.yaml has no version; keeping the bundled copy"; \
+		elif [ "$$new" -lt "$${old:-0}" ]; then \
+			echo "warning: the site's $$src.yaml is v$$new, older than the bundled v$$old (not deployed yet?); keeping the bundled copy"; \
+		else mv "$$tmp" "$$dst"; echo "Updated $$dst (v$$new)"; fi; \
 	done
 
 clean: ## Clean existing builds.

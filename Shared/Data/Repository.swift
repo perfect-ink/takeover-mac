@@ -9,7 +9,8 @@ import Darwin
 import Foundation
 import Observation
 
-struct RepositoryResponse: Decodable {
+struct RepositoryResponse: Decodable, VersionedCatalog {
+    /// The catalog's revision (see VersionedCatalog).
     let version: Int
     let os_recipies: [OSRecipe]?
     let apps: [AppConfig]

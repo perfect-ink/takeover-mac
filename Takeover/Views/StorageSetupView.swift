@@ -100,6 +100,12 @@ struct StorageSetupView: View {
             }
 
             HStack {
+                if !isFirstLaunch {
+                    Text(versionLine)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .textSelection(.enabled)
+                }
                 Spacer()
                 if isSaving { ProgressView().controlSize(.small) }
                 Button(isFirstLaunch ? "Continue" : "Save", action: save)
@@ -109,6 +115,14 @@ struct StorageSetupView: View {
         }
         .padding(24)
         .frame(width: 520)
+    }
+
+    /// The app's version and the catalogs' revisions, for bug reports.
+    private var versionLine: String {
+        var parts = ["Takeover \(SystemInfo.appVersion)"]
+        if let apps = Repository.shared.response?.version { parts.append("App catalog v\(apps)") }
+        if MacDefaultCatalog.shared.version > 0 { parts.append("Mac defaults v\(MacDefaultCatalog.shared.version)") }
+        return parts.joined(separator: " · ")
     }
 
     private var title: String {

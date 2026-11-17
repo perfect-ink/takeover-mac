@@ -6,7 +6,6 @@ struct MacDefaultListView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \MacDefault.name) private var macDefaults: [MacDefault]
     @State private var selection: MacDefault? = nil
-    @State private var sidebarVisible = true
     @ObservedObject private var agent = BackgroundAgent.shared
     @State private var lastApplied: (names: [String], at: Date)?
 
@@ -20,12 +19,6 @@ struct MacDefaultListView: View {
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 .help("Check these defaults at login and apply changes synced from your other Macs, even when Takeover is closed")
-
-                Button(action: { withAnimation { sidebarVisible.toggle() } }) {
-                    Image(systemName: "sidebar.left")
-                }
-                .buttonStyle(.plain)
-                .help("Toggle Sidebar")
 
                 Button(action: applyAll) {
                     Label("Apply All", systemImage: "checkmark.circle")
@@ -91,76 +84,74 @@ struct MacDefaultListView: View {
 
     private var macDefaultsContent: some View {
         HStack(spacing: 0) {
-            if sidebarVisible {
-                Group {
-                    if macDefaults.isEmpty {
-                        Text("No Mac Defaults")
-                            .foregroundColor(.secondary)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
-                        let grouped = Dictionary(grouping: macDefaults, by: { displayDomain($0.domain) })
-                        let domains = grouped.keys.sorted { a, b in a == "Global" ? true : b == "Global" ? false : a < b }
-                        List(selection: $selection) {
-                            ForEach(domains, id: \.self) { domain in
-                                Section {
-                                    ForEach(grouped[domain]!.sorted { $0.key < $1.key }, id: \.self) { item in
-                                        HStack {
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(item.name)
-                                                    .fontWeight(.medium)
-                                                HStack {
-                                                    Text(item.key)
+            Group {
+                if macDefaults.isEmpty {
+                    Text("No Mac Defaults")
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    let grouped = Dictionary(grouping: macDefaults, by: { displayDomain($0.domain) })
+                    let domains = grouped.keys.sorted { a, b in a == "Global" ? true : b == "Global" ? false : a < b }
+                    List(selection: $selection) {
+                        ForEach(domains, id: \.self) { domain in
+                            Section {
+                                ForEach(grouped[domain]!.sorted { $0.key < $1.key }, id: \.self) { item in
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(item.name)
+                                                .fontWeight(.medium)
+                                            HStack {
+                                                Text(item.key)
+                                                    .font(.caption)
+                                                    .foregroundColor(.secondary)
+                                                    .lineLimit(1)
+                                                if !item.value.isEmpty {
+                                                    Spacer()
+                                                    Text(item.value)
                                                         .font(.caption)
-                                                        .foregroundColor(.secondary)
+                                                        .foregroundColor(.accentColor)
                                                         .lineLimit(1)
-                                                    if !item.value.isEmpty {
-                                                        Spacer()
-                                                        Text(item.value)
-                                                            .font(.caption)
-                                                            .foregroundColor(.accentColor)
-                                                            .lineLimit(1)
-                                                    }
                                                 }
                                             }
                                         }
-                                        .tag(item)
-                                        .contextMenu {
-                                            Button("Capture") {
-                                                MacDefaultInstaller.capture(macDefault: item)
-                                                try? modelContext.save()
-                                                Task { await saveToYAML() }
-                                            }
-                                            Button("Apply") {
-                                                MacDefaultInstaller.apply(macDefault: item)
-                                            }
-                                            .disabled(item.value.isEmpty)
-                                            Divider()
-                                            Button("Delete", role: .destructive) { onDelete(item) }
-                                        }
                                     }
-                                } header: {
-                                    Text(domain)
-                                        .font(.subheadline)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.secondary)
-                                        .padding(.vertical, 4)
-                                        .padding(.horizontal, 8)
-                                        .background(Color(nsColor: .quaternaryLabelColor).opacity(0.3))
-                                        .cornerRadius(4)
+                                    .tag(item)
+                                    .contextMenu {
+                                        Button("Capture") {
+                                            MacDefaultInstaller.capture(macDefault: item)
+                                            try? modelContext.save()
+                                            Task { await saveToYAML() }
+                                        }
+                                        Button("Apply") {
+                                            MacDefaultInstaller.apply(macDefault: item)
+                                        }
+                                        .disabled(item.value.isEmpty)
+                                        Divider()
+                                        Button("Delete", role: .destructive) { onDelete(item) }
+                                    }
                                 }
-                            }
-                        }
-                        .listStyle(.sidebar)
-                        .onAppear {
-                            if selection == nil && !macDefaults.isEmpty {
-                                selection = macDefaults.first
+                            } header: {
+                                Text(domain)
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.secondary)
+                                    .padding(.vertical, 4)
+                                    .padding(.horizontal, 8)
+                                    .background(Color(nsColor: .quaternaryLabelColor).opacity(0.3))
+                                    .cornerRadius(4)
                             }
                         }
                     }
+                    .listStyle(.sidebar)
+                    .onAppear {
+                        if selection == nil && !macDefaults.isEmpty {
+                            selection = macDefaults.first
+                        }
+                    }
                 }
-                .frame(minWidth: 180, idealWidth: 200, maxWidth: 300)
-                Divider()
             }
+            .frame(minWidth: 180, idealWidth: 200, maxWidth: 300)
+            Divider()
 
             Group {
                 if let item = selection {

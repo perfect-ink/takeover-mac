@@ -135,11 +135,11 @@ jobs:
               --title "Takeover ${{ steps.version.outputs.version }}" --generate-notes
           fi
 
-      - name: Rebuild perfctink.com
+      - name: Rebuild perfectink.org
         if: env.TAG != ''
         env:
           GH_TOKEN: ${{ secrets.PERFCT_INK_DEPLOY_TOKEN }}
         run: |
           if [ -z "$GH_TOKEN" ]; then echo "PERFCT_INK_DEPLOY_TOKEN not set; the site picks this up at its next scheduled rebuild."; exit 0; fi
-          gh api repos/perfct-ink/perfct.ink/dispatches -f event_type=app-released \
+          gh api repos/perfect-ink/perfectink.org/dispatches -f event_type=app-released \
             -f "client_payload[repo]=$GITHUB_REPOSITORY" -f "client_payload[tag]=$TAG"

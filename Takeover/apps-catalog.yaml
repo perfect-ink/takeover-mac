@@ -34,7 +34,7 @@
 # this file: the Mac app keeps whichever copy (fetched, cached or bundled) has
 # the highest version, and CI refuses a change that doesn't raise it
 # (bin/check-catalog-versions).
-version: 5
+version: 6
 
 os_recipies:
   - name: Dock Orientation
@@ -51,6 +51,17 @@ apps:
     files:
       - name: Music Library
         path: ~/Music/Music
+  # Desktop wallpaper (macOS 14 Sonoma and later): WallpaperAgent keeps every
+  # display's and Space's choice in Store/Index.plist here. Built-in and Aerial
+  # wallpapers restore fully; a picture of your own is referenced by its path,
+  # so it comes back when that file is at the same path on the new Mac (e.g.
+  # in iCloud Drive). Restarting WallpaperAgent makes it read the synced file.
+  - name: Wallpaper
+    files:
+      - name: User Application Support
+        path: ~/Library/Application Support/com.apple.wallpaper
+    defaults:
+      - killall WallpaperAgent || true
   - name: Cyberduck
     files:
       - name: User Application Support

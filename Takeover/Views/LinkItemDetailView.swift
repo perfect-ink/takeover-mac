@@ -137,13 +137,11 @@ struct LinkItemDetailView: View {
                             .background(Color(nsColor: .controlBackgroundColor))
                             .cornerRadius(6)
 
-                        Button("Browse...") {
-                            Task {
-                                if let path = try await selectFile(startingAt: fromBrowseStart) {
-                                    let wasLinked = LinkItemInstaller.isLinked(linkItem)
-                                    linkItem.from = path
-                                    if !wasLinked { updateToForPickedSource() }
-                                }
+                        PathButton(help: "Choose the file or folder to sync") {
+                            if let path = selectFile(startingAt: fromBrowseStart) {
+                                let wasLinked = LinkItemInstaller.isLinked(linkItem)
+                                linkItem.from = path
+                                if !wasLinked { updateToForPickedSource() }
                             }
                         }
                     }
@@ -170,7 +168,7 @@ struct LinkItemDetailView: View {
                             .foregroundColor(.orange)
                     }
                 }
-                .card(enabled: !embedded)
+                .pathPanel()
 
                 // Arrow indicator
                 HStack {
@@ -211,13 +209,16 @@ struct LinkItemDetailView: View {
                             .background(Color(nsColor: .controlBackgroundColor))
                             .cornerRadius(6)
 
-                        Button("Browse...") {
-                            Task {
-                                if let path = try await selectFile(startingAt: toBrowseStart) {
-                                    changeTo(toValue(forPicked: path))
-                                }
+                        PathButton(help: "Change: use another folder as To. Nothing is moved; the link points at the new folder.") {
+                            if let path = selectFile(startingAt: toBrowseStart, prompt: "Use This Folder",
+                                                     message: "Choose the new destination. Nothing is moved; the link will point here.") {
+                                pointTo(toValue(forPicked: path))
                             }
                         }
+                        PathButton(kind: .move, help: "Move: move To into another folder and relink") {
+                            moveToIntoPickedFolder()
+                        }
+                        .disabled(linkItem.to.isEmpty)
                     }
 
                     if let localTarget {
@@ -227,7 +228,7 @@ struct LinkItemDetailView: View {
                             .textSelection(.enabled)
                     }
                 }
-                .card(enabled: !embedded)
+                .pathPanel()
             }
 
             // Command to run after linking
@@ -355,6 +356,33 @@ struct LinkItemDetailView: View {
         }
     }
 
+    /// Change: To becomes the picked path and nothing is moved. The old
+    /// destination keeps its files; a linked source now points at the new one.
+    @discardableResult
+    private func pointTo(_ to: String) -> Bool {
+        do {
+            try LinkItemInstaller.pointDestination(of: linkItem, to: to)
+            onSave?(linkItem)
+            return true
+        } catch {
+            renameError = error.localizedDescription
+            return false
+        }
+    }
+
+    /// Move: To's folder (named as it is now) moves into the picked folder,
+    /// and a linked source is relinked to it (`changeDestination`).
+    private func moveToIntoPickedFolder() {
+        let current = Config.expandedDestinationPath(for: linkItem.to)
+        let name = (current as NSString).lastPathComponent
+        guard let folder = selectFile(startingAt: toBrowseStart, prompt: "Move Here",
+                                      message: "Choose the folder to move \(name) into.", foldersOnly: true)
+        else { return }
+        let newPath = (folder as NSString).appendingPathComponent(name)
+        guard !LinkItemInstaller.samePath(newPath, current) else { return }
+        if changeTo(toValue(forPicked: newPath)) { onSave?(linkItem) }
+    }
+
     /// Link status icon plus the Install / Uninstall button.
     @ViewBuilder private var statusAndButtons: some View {
         statusIcon
@@ -473,14 +501,16 @@ struct LinkItemDetailView: View {
         return String(picked.dropFirst(root.count + 1))
     }
 
-    func selectFile(startingAt directory: String? = nil) async throws -> String? {
+    func selectFile(startingAt directory: String? = nil, prompt: String? = nil,
+                    message: String = "Select the path for the link", foldersOnly: Bool = false) -> String? {
         let panel = NSOpenPanel()
         if let directory { panel.directoryURL = URL(fileURLWithPath: directory, isDirectory: true) }
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
-        panel.canChooseFiles = true
-        panel.message = "Select the path for the link"
+        panel.canChooseFiles = !foldersOnly
+        panel.message = message
+        if let prompt { panel.prompt = prompt }
 
         var filename: String?
         if panel.runModal() == .OK {
@@ -530,6 +560,17 @@ struct LinkItemDetailView: View {
 
 
 extension View {
+    /// Rounded panel around a location's From or To, shown on its own page and
+    /// inside an app's page, so the two read as separate parts.
+    func pathPanel() -> some View {
+        self
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.secondary.opacity(0.06))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.2)))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
     /// Rounded, bordered box around a group of related fields.
     @ViewBuilder
     func card(enabled: Bool = true, padding: CGFloat = 12) -> some View {

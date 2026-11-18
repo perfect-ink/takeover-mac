@@ -96,7 +96,7 @@ struct AppInstallerContentView: View {
                     .font(.system(.body, design: .monospaced))
                     .frame(width: 260)
                     .onSubmit { refresh() }
-                Button("Browse") { browseForFolder() }
+                PathButton(help: "Choose the installers folder") { browseForFolder() }
                 Button {
                     refresh()
                 } label: {

@@ -79,7 +79,7 @@ struct StorageSetupView: View {
                             .lineLimit(1)
                             .truncationMode(.middle)
                         Spacer()
-                        Button("Choose…", action: chooseFolder)
+                        PathButton(help: "Choose the settings folder", action: chooseFolder)
                     }
                 case .takeoverCloud:
                     CloudAccountView()

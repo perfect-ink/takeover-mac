@@ -1,6 +1,6 @@
 # Destination follows the picked source
 
-When you pick a folder for a sync location's From (Browse... in `Takeover/Views/LinkItemDetailView.swift`), To is renamed after that folder, so it shows what's being synced instead of a placeholder like `Location 2`.
+When you pick a folder for a sync location's From (the folder icon button next to From in `Takeover/Views/LinkItemDetailView.swift`), To is renamed after that folder, so it shows what's being synced instead of a placeholder like `Location 2`.
 
 - The name comes from `RecipeInstaller.destination(appName:from:others:)` (`Takeover/Views/RecipesView.swift`): the app's folder, then the picked folder's name (`Ableton/User Library`), which is also the location's name. See [sync_destination_folders.md](sync_destination_folders.md).
 - If another location already uses that name, `RecipeInstaller.uniqueDestination` adds the part of the path that differs from that location's: `~/Library/Audio/Plug-Ins` next to `/Library/Audio/Plug-Ins` becomes `Plug-Ins (User)` (the other way round, `Plug-Ins (System)`). If that's taken too, a number is added. Adding a catalog recipe's locations uses the same check.

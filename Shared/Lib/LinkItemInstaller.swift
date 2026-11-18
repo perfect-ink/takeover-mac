@@ -235,6 +235,45 @@ struct LinkItemInstaller {
         linkItem.label = ""
     }
 
+    /// Points a location at another destination without moving anything (the
+    /// Change button; Move goes through `changeDestination`). The old
+    /// destination keeps its files. When the source is linked to the old
+    /// destination, or its link is broken, it's relinked to the new one; a
+    /// local-store location's local folder is seeded from the new synced copy
+    /// first, and a missing new folder is created so the link isn't left
+    /// dangling. If relinking fails the old link is put back and To is unchanged.
+    @MainActor
+    static func pointDestination(of linkItem: LinkItem, to newTo: String) throws {
+        guard !newTo.isEmpty else { return }
+        let newPath = Config.linkTargetPath(from: linkItem.from, to: newTo)
+        let source = linkItem.from.isEmpty ? "" : PathUtility.expandTildeToRealHome(linkItem.from)
+        let sourceIsLink = !source.isEmpty && FileOps.isSymlink(source)
+        let oldTarget = sourceIsLink ? linkTarget(source) : nil
+        let pointsAtOld = !linkItem.to.isEmpty && oldTarget.map {
+            let oldPath = Config.linkTargetPath(from: linkItem.from, to: linkItem.to)
+            return samePath($0, oldPath) || isInside($0, oldPath)
+        } == true
+        let dangling = sourceIsLink && !FileOps.exists(source)
+
+        if (pointsAtOld || dangling), oldTarget.map({ !samePath($0, newPath) }) ?? true {
+            do {
+                try LocalStoreBackup.seedIfNeeded(from: linkItem.from, to: newTo)
+                if !FileOps.exists(newPath) { try FileOps.makeDirectory(newPath, allowPrivileged: true) }
+                try FileOps.remove(source, allowPrivileged: true)
+                try FileOps.symlink(at: source, to: newPath, allowPrivileged: true)
+                try verifyLink(originalPath: source, backupPath: newPath)
+            } catch {
+                if let oldTarget, linkTarget(source).map({ !samePath($0, oldTarget) }) ?? true {
+                    try? FileOps.remove(source, allowPrivileged: true)
+                    try? FileOps.symlink(at: source, to: oldTarget, allowPrivileged: true)
+                }
+                throw LinkInstallError.symlinkFailed(error.localizedDescription)
+            }
+        }
+        linkItem.to = newTo
+        linkItem.label = ""
+    }
+
     @MainActor
     static func moveDestination(of linkItem: LinkItem, to newTo: String, adoptExisting: Bool = false) throws {
         guard !linkItem.to.isEmpty, !newTo.isEmpty else { return }

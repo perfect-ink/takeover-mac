@@ -135,6 +135,69 @@ struct TakeoverTests {
         #expect(try String(contentsOfFile: source + "/config", encoding: .utf8) == "mine")
     }
 
+    /// Change points a location at another folder without moving anything:
+    /// the old destination keeps its files and the link follows To.
+    @MainActor @Test func changingDestinationRelinksWithoutMovingFiles() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+        defer { try? fm.removeItem(atPath: root) }
+        let old = root + "/Takeover/SSH/User SSH", new = root + "/Elsewhere/SSH"
+        try fm.createDirectory(atPath: old, withIntermediateDirectories: true)
+        try fm.createDirectory(atPath: new, withIntermediateDirectories: true)
+        try "old".write(toFile: old + "/config", atomically: true, encoding: .utf8)
+        try "new".write(toFile: new + "/config", atomically: true, encoding: .utf8)
+        let source = root + "/.ssh"
+        try fm.createSymbolicLink(atPath: source, withDestinationPath: old)
+        let item = LinkItem(name: "SSH", from: source, to: old)
+
+        try LinkItemInstaller.pointDestination(of: item, to: new)
+
+        #expect(item.to == new)
+        #expect(LinkItemInstaller.isLinked(item))
+        #expect(try String(contentsOfFile: source + "/config", encoding: .utf8) == "new")
+        #expect(try String(contentsOfFile: old + "/config", encoding: .utf8) == "old")
+    }
+
+    /// Change on a location that isn't linked only sets To; a new folder
+    /// that isn't there yet is created only when a link needs it.
+    @MainActor @Test func changingDestinationOfAnUnlinkedLocationOnlySetsTo() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+        defer { try? fm.removeItem(atPath: root) }
+        let source = root + "/.ssh", new = root + "/Elsewhere/SSH"
+        try fm.createDirectory(atPath: source, withIntermediateDirectories: true)
+        let item = LinkItem(name: "SSH", from: source, to: root + "/Takeover/SSH/User SSH")
+
+        try LinkItemInstaller.pointDestination(of: item, to: new)
+
+        #expect(item.to == new)
+        #expect(!fm.fileExists(atPath: new))
+        #expect(!LinkItemInstaller.isLinked(item))
+    }
+
+    /// Move puts the destination folder, under its current name, inside the
+    /// picked folder and relinks it.
+    @MainActor @Test func movingDestinationIntoAnotherFolderRelinks() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+        defer { try? fm.removeItem(atPath: root) }
+        let old = root + "/Takeover/SSH/User SSH", folder = root + "/Archive"
+        try fm.createDirectory(atPath: old, withIntermediateDirectories: true)
+        try fm.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        try "mine".write(toFile: old + "/config", atomically: true, encoding: .utf8)
+        let source = root + "/.ssh"
+        try fm.createSymbolicLink(atPath: source, withDestinationPath: old)
+        let item = LinkItem(name: "SSH", from: source, to: old)
+
+        let new = (folder as NSString).appendingPathComponent((old as NSString).lastPathComponent)
+        try LinkItemInstaller.changeDestination(of: item, to: new)
+
+        #expect(item.to == new)
+        #expect(!fm.fileExists(atPath: old))
+        #expect(LinkItemInstaller.isLinked(item))
+        #expect(try String(contentsOfFile: source + "/config", encoding: .utf8) == "mine")
+    }
+
     /// A link already dangling at the old destination is pointed at the new one.
     @MainActor @Test func changingToRepairsALinkToAMissingDestination() throws {
         let fm = FileManager.default

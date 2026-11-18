@@ -34,7 +34,7 @@
 # this file: the Mac app keeps whichever copy (fetched, cached or bundled) has
 # the highest version, and CI refuses a change that doesn't raise it
 # (bin/check-catalog-versions).
-version: 6
+version: 7
 
 os_recipies:
   - name: Dock Orientation
@@ -365,6 +365,75 @@ apps:
     files:
       - name: User Application Support
         path: ~/Library/Application Support/Blender
+
+  # Adobe. ~/Library/Application Support/Adobe also holds Creative Cloud's
+  # sign-in and licensing (OOBE, SLStore) and the shared media caches (Common,
+  # often tens of gigabytes), so each app's own folders are synced instead of
+  # the whole Adobe folder. Preferences plists and caches stay out; versioned
+  # folders use `*`, one location per installed version.
+  - name: Adobe Photoshop
+    files:
+      - name: User Photoshop * Settings
+        path: ~/Library/Preferences/Adobe Photoshop * Settings
+      - name: User Photoshop * Presets
+        path: ~/Library/Application Support/Adobe/Adobe Photoshop */Presets
+  - name: Adobe Illustrator
+    files:
+      - name: User Illustrator * Settings
+        path: ~/Library/Preferences/Adobe Illustrator * Settings
+      - name: User Illustrator *
+        path: ~/Library/Application Support/Adobe/Adobe Illustrator *
+  - name: Adobe InDesign
+    files:
+      - name: User InDesign Preferences
+        path: ~/Library/Preferences/Adobe InDesign
+      - name: User InDesign
+        path: ~/Library/Application Support/Adobe/InDesign
+  # Lightroom Classic's catalog (~/Pictures/Lightroom) is photo data, not
+  # settings, so only its presets, templates and plug-ins are synced.
+  - name: Adobe Lightroom Classic
+    files:
+      - name: User Lightroom
+        path: ~/Library/Application Support/Adobe/Lightroom
+  # Camera Raw's presets and profiles, shared by Lightroom and Photoshop.
+  - name: Adobe Camera Raw
+    files:
+      - name: User Camera Raw Settings
+        path: ~/Library/Application Support/Adobe/CameraRaw/Settings
+      - name: User Camera Raw Profiles
+        path: ~/Library/Application Support/Adobe/CameraRaw/CameraProfiles
+      - name: User Camera Raw Defaults
+        path: ~/Library/Application Support/Adobe/CameraRaw/Defaults
+  - name: Adobe Bridge
+    files:
+      - name: User Bridge *
+        path: ~/Library/Application Support/Adobe/Bridge *
+  - name: Adobe Premiere Pro
+    files:
+      - name: User Premiere Pro Documents
+        path: ~/Documents/Adobe/Premiere Pro
+  - name: Adobe After Effects
+    files:
+      - name: User After Effects Preferences
+        path: ~/Library/Preferences/Adobe/After Effects
+      - name: User After Effects * Documents
+        path: ~/Documents/Adobe/After Effects *
+  - name: Adobe Media Encoder
+    files:
+      - name: User Media Encoder Documents
+        path: ~/Documents/Adobe/Adobe Media Encoder
+  - name: Adobe Audition
+    files:
+      - name: User Audition
+        path: ~/Library/Application Support/Adobe/Audition
+  # Acrobat's preferences are a plist and its DC folder also holds cloud sync
+  # state, so only custom stamps and JavaScripts are synced.
+  - name: Adobe Acrobat
+    files:
+      - name: User Acrobat Stamps
+        path: ~/Library/Application Support/Adobe/Acrobat/DC/Stamps
+      - name: User Acrobat JavaScripts
+        path: ~/Library/Application Support/Adobe/Acrobat/DC/JavaScripts
 
   # Audio plug-in vendors. Each syncs the vendor's own folders; their
   # Audio/Presets subfolders come with Audio Presets above.

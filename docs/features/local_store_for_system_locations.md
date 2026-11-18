@@ -1,6 +1,6 @@
 # Local store for system locations
 
-Sync locations outside the home folder, such as `/Library/Application Support/Native Instruments` or `/Library/Audio/Plug-Ins`, are still symlinks, but they point at a local folder instead of the settings folder. Takeover backs that local folder up into the settings folder.
+Sync locations outside the home folder, such as `/Library/Application Support/Native Instruments/Kontakt 8`, are still symlinks, but they point at a local folder instead of the settings folder. Takeover backs that local folder up into the settings folder.
 
 ## Why
 
@@ -32,3 +32,4 @@ macOS doesn't let system services open files in iCloud Drive (or Dropbox) throug
 ## History
 
 - Implemented 2026-11-16, after the Native Instruments installer failed through a link into iCloud Drive. Not compiled locally (Linux session); the GitHub Actions build on main compiles it. Not yet in a release.
+- 2026-11-18: `/Library/Audio` no longer uses the local store; it's mirrored as a real folder instead (see [audio_folder_mirror.md](audio_folder_mirror.md)).

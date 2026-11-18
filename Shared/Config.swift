@@ -30,12 +30,29 @@ struct Config {
     /// (see LocalStoreBackup).
     static let localStoreRoot = "/Users/Shared/Takeover"
 
-    /// True for sources outside the home folder, e.g. /Library/Audio/Plug-Ins.
+    /// True for sources outside the home folder, e.g.
+    /// /Library/Application Support/Native Instruments/Kontakt 8, other than
+    /// the mirrored ones.
     static func usesLocalStore(from: String) -> Bool {
-        guard !from.isEmpty else { return false }
+        guard !from.isEmpty, !mirrors(from: from) else { return false }
         let source = PathUtility.expandTildeToRealHome(from)
         let home = PathUtility.getRealHomeDirectory()
         return !(source == home || source.hasPrefix(home + "/"))
+    }
+
+    /// Folders that plug-in installers write into, as root: kept as real
+    /// folders and copied both ways with the settings folder instead of
+    /// linked (see FolderMirror).
+    static let mirroredFolders = ["/Library/Audio", "~/Library/Audio"]
+
+    /// True for sources in or under `mirroredFolders`, e.g. ~/Library/Audio/Presets.
+    static func mirrors(from: String) -> Bool {
+        guard !from.isEmpty else { return false }
+        let source = (PathUtility.expandTildeToRealHome(from) as NSString).standardizingPath.lowercased()
+        return mirroredFolders.contains { folder in
+            let root = PathUtility.expandTildeToRealHome(folder).lowercased()
+            return source == root || source.hasPrefix(root + "/")
+        }
     }
 
     /// What the link at `from` points to: the synced copy for home-folder

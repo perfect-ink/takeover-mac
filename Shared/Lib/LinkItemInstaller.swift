@@ -18,6 +18,8 @@ enum LinkInstallError: LocalizedError {
     case restoreFailed(String)
     case verificationFailed(String)
     case insideLinkedLocation(String)
+    case containsLinkedLocation(String)
+    case mirrorFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -37,6 +39,10 @@ enum LinkInstallError: LocalizedError {
             return "The link was removed, but restoring the files failed: \(detail)"
         case let .insideLinkedLocation(name):
             return "This folder is inside \(name), which is linked. Uninstall \(name) with Move destination first, so this folder is real again, then install it."
+        case let .containsLinkedLocation(name):
+            return "\(name) is linked inside this folder. Uninstall \(name) with Move destination first, so it's a real folder again, then install this one."
+        case let .mirrorFailed(detail):
+            return "Couldn't copy the folder: \(detail)"
         case let .defaultsCommandFailed(detail):
             return "The linked defaults command failed: \(detail)"
         }
@@ -84,6 +90,11 @@ struct LinkItemInstaller {
 
         // Already linked to this destination: nothing to do.
         if isLinked(linkItem) { return }
+
+        if Config.mirrors(from: linkItem.from) {
+            try installMirror(linkItem)
+            return
+        }
 
         // Linking a folder that sits inside another linked location would move
         // files around inside that location's synced copy.
@@ -188,6 +199,17 @@ struct LinkItemInstaller {
             throw LinkInstallError.fullDiskAccessRequired
         }
 
+        // A mirrored folder is already real: just stop copying it. Both copies
+        // keep their files.
+        if Config.mirrors(from: linkItem.from), !linkItem.to.isEmpty {
+            do {
+                try FolderMirror.setMirrored(false, from: linkItem.from, to: linkItem.to)
+            } catch {
+                throw LinkInstallError.removeFailed(error.localizedDescription)
+            }
+            return
+        }
+
         let originalPath = PathUtility.expandTildeToRealHome(linkItem.from)
         guard FileOps.isSymlink(originalPath) else {
             print("Nothing to uninstall — \(originalPath) is not a symlink")
@@ -231,6 +253,7 @@ struct LinkItemInstaller {
         try moveDestination(of: linkItem, to: newTo, adoptExisting: adoptExisting)
         // A local-store location's backup in the settings folder moves too.
         moveSyncedCopy(of: linkItem, to: newTo)
+        followMirror(of: linkItem, to: newTo)
         linkItem.to = newTo
         linkItem.label = ""
     }
@@ -270,6 +293,7 @@ struct LinkItemInstaller {
                 throw LinkInstallError.symlinkFailed(error.localizedDescription)
             }
         }
+        followMirror(of: linkItem, to: newTo)
         linkItem.to = newTo
         linkItem.label = ""
     }
@@ -376,6 +400,78 @@ struct LinkItemInstaller {
         }
     }
 
+    // MARK: - Mirrored folders
+
+    /// Installs a mirrored folder (see FolderMirror): no link. This Mac's
+    /// folder gets the synced copy's newer files, with the password when the
+    /// folder is root's, then the synced copy gets this Mac's, in the background
+    /// since plug-ins can be gigabytes.
+    @MainActor
+    private static func installMirror(_ linkItem: LinkItem) throws {
+        if let child = linkedChild(of: linkItem) {
+            throw LinkInstallError.containsLinkedLocation(child.name)
+        }
+        let local = PathUtility.expandTildeToRealHome(linkItem.from)
+        let synced = Config.expandedDestinationPath(for: linkItem.to)
+        let rsync = "/usr/bin/rsync"
+        do {
+            // A link an earlier build made here: put a real copy of what it
+            // points to in its place. What it points to is left alone.
+            if FileOps.isSymlink(local) {
+                let target = linkTarget(local)
+                try FileOps.remove(local, allowPrivileged: true)
+                if let target, FileOps.exists(target) {
+                    try FileOps.copy(from: target, to: local, allowPrivileged: true)
+                }
+            }
+            if FileOps.exists(synced) {
+                if !FileOps.exists(local), FileOps.isDirectory(synced) {
+                    try FileOps.makeDirectory(local, allowPrivileged: true)
+                }
+                let args = FolderMirror.rsyncArguments(synced, into: local)
+                if !Proc.run(rsync, args).ok { try PrivilegedShell.run([rsync] + args) }
+            } else if !FileOps.exists(local) {
+                // Nothing on either side yet: start with an empty folder here.
+                try FileOps.makeDirectory(local, allowPrivileged: true)
+            }
+            try FolderMirror.setMirrored(true, from: linkItem.from, to: linkItem.to)
+        } catch {
+            throw LinkInstallError.mirrorFailed(error.localizedDescription)
+        }
+        print("Mirroring \(local) with \(synced)")
+        DispatchQueue.global(qos: .utility).async {
+            if let error = FolderMirror.push(local: local, synced: synced) { print(error) }
+        }
+
+        if !linkItem.defaults.isEmpty {
+            let result = Shell.runTrusted(linkItem.defaults)
+            if !result.ok {
+                throw LinkInstallError.defaultsCommandFailed(result.text)
+            }
+        }
+    }
+
+    /// Keeps this Mac's record of a mirrored folder pointing at its new To.
+    private static func followMirror(of linkItem: LinkItem, to newTo: String) {
+        guard Config.mirrors(from: linkItem.from), !linkItem.to.isEmpty,
+              FolderMirror.isMirrored(from: linkItem.from, to: linkItem.to) else { return }
+        try? FolderMirror.setMirrored(true, from: linkItem.from, to: newTo)
+    }
+
+    /// Another saved location that is linked and sits inside this one's
+    /// source, e.g. Serum's /Library/Audio/Presets/Xfer Records for
+    /// /Library/Audio/Presets. Mirroring would copy that link, not its files.
+    static func linkedChild(of linkItem: LinkItem) -> LinkItem? {
+        guard !linkItem.from.isEmpty, let context = linkItem.modelContext,
+              let items = try? context.fetch(FetchDescriptor<LinkItem>()) else { return nil }
+        let source = plainPath(linkItem.from)
+        return items.first { other in
+            other.persistentModelID != linkItem.persistentModelID && !other.from.isEmpty
+                && plainPath(other.from).hasPrefix(source + "/")
+                && FileOps.isSymlink(PathUtility.expandTildeToRealHome(other.from))
+        }
+    }
+
     /// Another saved location that is linked and whose source contains this
     /// one's, e.g. /Library/Application Support/Native Instruments for its
     /// Kontakt 7 folder.
@@ -447,6 +543,8 @@ struct LinkItemInstaller {
     /// copy, so the user should pick which to keep (or merge).
     static func hasConflict(_ linkItem: LinkItem) -> Bool {
         guard !linkItem.from.isEmpty, !linkItem.to.isEmpty, !isLinked(linkItem) else { return false }
+        // A mirrored folder merges both copies; there's nothing to pick.
+        guard !Config.mirrors(from: linkItem.from) else { return false }
         let original = PathUtility.expandTildeToRealHome(linkItem.from)
         let backup = target(of: linkItem)
         let synced = Config.expandedDestinationPath(for: linkItem.to)
@@ -479,8 +577,12 @@ struct LinkItemInstaller {
 
     /// True when "from" is a symlink that resolves to this item's destination,
     /// however either path is spelled (~, symlinked parents, trailing slashes).
+    /// For a mirrored folder (no link), true when this Mac mirrors it into To.
     static func isLinked(_ linkItem: LinkItem) -> Bool {
         guard !linkItem.from.isEmpty, !linkItem.to.isEmpty else { return false }
+        if Config.mirrors(from: linkItem.from) {
+            return FolderMirror.isMirrored(from: linkItem.from, to: linkItem.to)
+        }
         let fromPath = PathUtility.expandTildeToRealHome(linkItem.from)
         guard FileOps.isSymlink(fromPath), let target = linkTarget(fromPath) else { return false }
         return samePath(target, Self.target(of: linkItem))

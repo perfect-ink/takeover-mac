@@ -228,8 +228,57 @@ struct TakeoverTests {
         #expect(Config.linkTargetPath(from: "~/Library/Preferences/x", to: to)
                 == Config.expandedDestinationPath(for: to))
         // A To picked outside the settings folder is used as-is.
-        #expect(Config.linkTargetPath(from: "/Library/Audio/Plug-Ins", to: "/Volumes/Audio/Plug-Ins")
-                == "/Volumes/Audio/Plug-Ins")
+        #expect(Config.linkTargetPath(from: "/Library/Application Support/Native Instruments", to: "/Volumes/Audio/NI")
+                == "/Volumes/Audio/NI")
+    }
+
+    @Test func audioFoldersAreMirroredNotLinked() {
+        #expect(Config.mirrors(from: "/Library/Audio/Plug-Ins"))
+        #expect(Config.mirrors(from: "/Library/Audio/Presets/Xfer Records"))
+        #expect(Config.mirrors(from: "~/Library/Audio/Presets"))
+        #expect(!Config.mirrors(from: "/Library/AudioThing"))
+        #expect(!Config.mirrors(from: "/Library/Application Support/Native Instruments"))
+        #expect(!Config.mirrors(from: ""))
+        // Mirrored folders aren't linked, so they don't go through the local store.
+        #expect(!Config.usesLocalStore(from: "/Library/Audio/Plug-Ins"))
+    }
+
+    /// Both copies get each other's newer files, and nothing is deleted.
+    @Test func mirroringCopiesBothWaysAndDeletesNothing() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+        defer { try? fm.removeItem(atPath: root) }
+        let local = root + "/Plug-Ins", synced = root + "/Takeover/Audio Plug-Ins/Library Audio Plug-Ins"
+        try fm.createDirectory(atPath: local + "/VST3", withIntermediateDirectories: true)
+        try fm.createDirectory(atPath: synced + "/Components", withIntermediateDirectories: true)
+        try "serum".write(toFile: local + "/VST3/Serum.vst3", atomically: true, encoding: .utf8)
+        try "diva".write(toFile: synced + "/Components/Diva.component", atomically: true, encoding: .utf8)
+
+        #expect(FolderMirror.pull(local: local, synced: synced) == nil)
+        #expect(FolderMirror.push(local: local, synced: synced) == nil)
+
+        #expect(try String(contentsOfFile: local + "/Components/Diva.component", encoding: .utf8) == "diva")
+        #expect(try String(contentsOfFile: synced + "/VST3/Serum.vst3", encoding: .utf8) == "serum")
+    }
+
+    @Test func mirrorStateIsKeptPerSource() throws {
+        let saved = FolderMirror.statePath
+        FolderMirror.statePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("takeover-test-\(UUID().uuidString)/mirrored-locations.json").path
+        defer {
+            try? FileManager.default.removeItem(atPath: (FolderMirror.statePath as NSString).deletingLastPathComponent)
+            FolderMirror.statePath = saved
+        }
+        let from = "/Library/Audio/Plug-Ins"
+        #expect(!FolderMirror.isMirrored(from: from, to: "Audio Plug-Ins/Library Audio Plug-Ins"))
+        try FolderMirror.setMirrored(true, from: from, to: "Audio Plug-Ins/Library Audio Plug-Ins")
+        #expect(FolderMirror.isMirrored(from: from + "/", to: "Audio Plug-Ins/Library Audio Plug-Ins"))
+        // A new To replaces the old one.
+        try FolderMirror.setMirrored(true, from: from, to: "Plug-Ins")
+        #expect(!FolderMirror.isMirrored(from: from, to: "Audio Plug-Ins/Library Audio Plug-Ins"))
+        #expect(FolderMirror.entries().count == 1)
+        try FolderMirror.setMirrored(false, from: from, to: "Plug-Ins")
+        #expect(FolderMirror.entries().isEmpty)
     }
 
     /// A folder inside a linked location (Kontakt 7 inside a linked Native

@@ -486,6 +486,11 @@ struct LinkItemListView: View {
 
     /// Asks what to do with the synced files before removing a link.
     private func onUninstall(linkItem: LinkItem) -> Void {
+        // A mirrored folder is already real, so there's nothing to ask.
+        if Config.mirrors(from: linkItem.from) {
+            uninstall(linkItem, mode: .removeLink)
+            return
+        }
         let path = PathUtility.expandTildeToRealHome(linkItem.from)
         if FileOps.isSymlink(path) {
             pendingUninstall = [linkItem]
@@ -494,7 +499,12 @@ struct LinkItemListView: View {
 
     /// Uninstall every linked location of an app after one question.
     private func onUninstallAll(items: [LinkItem]) -> Void {
-        let linked = items.filter { FileOps.isSymlink(PathUtility.expandTildeToRealHome($0.from)) }
+        for item in items where Config.mirrors(from: item.from) && LinkItemInstaller.isLinked(item) {
+            uninstall(item, mode: .removeLink)
+        }
+        let linked = items.filter {
+            !Config.mirrors(from: $0.from) && FileOps.isSymlink(PathUtility.expandTildeToRealHome($0.from))
+        }
         if !linked.isEmpty { pendingUninstall = linked }
     }
 

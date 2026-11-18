@@ -6,7 +6,8 @@ struct Installer {
     // MARK: - Status
 
     static func isInstalled(_ link: LinkConfig) -> Bool {
-        isSymlink(atPath: PathUtility.expandTildeToRealHome(link.from))
+        if Config.mirrors(from: link.from) { return FolderMirror.isMirrored(from: link.from, to: link.to) }
+        return isSymlink(atPath: PathUtility.expandTildeToRealHome(link.from))
     }
 
     static func isSymlink(atPath path: String) -> Bool {
@@ -52,6 +53,7 @@ struct Installer {
         // /Library locations link into a local folder (see Config.linkTargetPath).
         let toPath = Config.linkTargetPath(from: link.from, to: link.to)
 
+        if Config.mirrors(from: link.from) { return installMirror(link) }
         if isSymlink(atPath: fromPath) {
             return .failure(.alreadyInstalled)
         }
@@ -110,6 +112,11 @@ struct Installer {
     // MARK: - Uninstall
 
     static func uninstall(_ link: LinkConfig) -> Result<Void, InstallError> {
+        if Config.mirrors(from: link.from) {
+            guard FolderMirror.isMirrored(from: link.from, to: link.to) else { return .failure(.notInstalled) }
+            return (try? FolderMirror.setMirrored(false, from: link.from, to: link.to)) != nil
+                ? .success(()) : .failure(.removeFailed)
+        }
         let fromPath = PathUtility.expandTildeToRealHome(link.from)
 
         guard isSymlink(atPath: fromPath) else {
@@ -122,6 +129,32 @@ struct Installer {
             : "rm '\(escaped(fromPath))'"
         let code = run(cmd)
         return code == 0 ? .success(()) : .failure(.removeFailed)
+    }
+
+    /// A mirrored folder (see FolderMirror): no link. Copies the synced
+    /// copy's newer files here (with sudo when the folder is root's), then
+    /// this Mac's into the synced copy.
+    private static func installMirror(_ link: LinkConfig) -> Result<Void, InstallError> {
+        if isInstalled(link) { return .failure(.alreadyInstalled) }
+        let local = PathUtility.expandTildeToRealHome(link.from)
+        let synced = Config.expandedDestinationPath(for: link.to)
+        if isSymlink(atPath: local) {
+            print("\(local) is a link. Uninstall it first, so it's a real folder again.")
+            return .failure(.moveFailed)
+        }
+        let fm = FileManager.default
+        if fm.fileExists(atPath: synced) {
+            if FolderMirror.pull(local: local, synced: synced) != nil {
+                let args = FolderMirror.rsyncArguments(synced, into: local).map { "'\(escaped($0))'" }
+                if run("sudo /usr/bin/rsync " + args.joined(separator: " ")) != 0 { return .failure(.moveFailed) }
+            }
+        } else if !fm.fileExists(atPath: local) {
+            let mkdir = requiresSudo(local) ? "sudo mkdir -p '\(escaped(local))'" : "mkdir -p '\(escaped(local))'"
+            if run(mkdir) != 0 { return .failure(.moveFailed) }
+        }
+        if let error = FolderMirror.push(local: local, synced: synced) { print(error) }
+        if (try? FolderMirror.setMirrored(true, from: link.from, to: link.to)) == nil { return .failure(.moveFailed) }
+        return .success(())
     }
 
     // MARK: - Helpers

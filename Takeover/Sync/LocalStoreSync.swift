@@ -5,6 +5,7 @@ import Foundation
 /// write into iCloud Drive through a link), so their files only reach the
 /// settings folder through this backup. The app runs it at start and every
 /// few minutes; the background agent does the same while the app is closed.
+/// The same pass copies mirrored folders both ways (see FolderMirror).
 enum LocalStoreSync {
     static let interval: UInt64 = 10 * 60 * 1_000_000_000
 
@@ -21,6 +22,8 @@ enum LocalStoreSync {
                     print(error)
                 }
             }
+            // Mirrored folders (audio plug-ins and presets) copy both ways.
+            FolderMirror.syncAll()
         }
     }
 

@@ -221,6 +221,12 @@ struct LinkItemDetailView: View {
                         .disabled(linkItem.to.isEmpty)
                     }
 
+                    if Config.mirrors(from: linkItem.from) {
+                        Text("Kept as a real folder, not a link, so plug-in installers can write to it. Takeover copies newer files both ways between it and To every 10 minutes; deleting a file doesn't delete it from the other side.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
                     if let localTarget {
                         Text("Linked through \(localTarget), because macOS doesn't let installers write into iCloud Drive or Dropbox through a link. Takeover backs it up to To.")
                             .font(.caption)
@@ -437,7 +443,9 @@ struct LinkItemDetailView: View {
     private var missingSourceWarning: String? {
         guard !LinkItemInstaller.sourceExists(linkItem.from) else { return nil }
         if !linkItem.to.isEmpty, FileOps.exists(Config.expandedDestinationPath(for: linkItem.to)) {
-            return "This path doesn't exist on this Mac. Installing links it to your synced copy."
+            return Config.mirrors(from: linkItem.from)
+                ? "This path doesn't exist on this Mac. Installing copies your synced copy here."
+                : "This path doesn't exist on this Mac. Installing links it to your synced copy."
         }
         return "This path doesn't exist on this Mac, so there's nothing to sync yet. Installing links an empty folder here."
     }

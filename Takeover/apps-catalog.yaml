@@ -34,7 +34,7 @@
 # this file: the Mac app keeps whichever copy (fetched, cached or bundled) has
 # the highest version, and CI refuses a change that doesn't raise it
 # (bin/check-catalog-versions).
-version: 7
+version: 8
 
 os_recipies:
   - name: Dock Orientation
@@ -140,6 +140,8 @@ apps:
     files:
       - name: Git Config
         path: ~/.gitconfig
+      - name: Git XDG Config
+        path: ~/.config/git
   - name: Zsh
     files:
       - name: Zsh Config
@@ -178,6 +180,57 @@ apps:
         path: ~/.gnupg/gpg.conf
       - name: GnuPG Agent Config
         path: ~/.gnupg/gpg-agent.conf
+  - name: EditorConfig
+    files:
+      - name: EditorConfig
+        path: ~/.editorconfig
+  # Atuin's history database and encryption key (~/.local/share/atuin) stay out.
+  - name: Atuin
+    files:
+      - name: Atuin Config
+        path: ~/.config/atuin/config.toml
+  - name: mise
+    files:
+      - name: mise Config
+        path: ~/.config/mise
+  - name: direnv
+    files:
+      - name: direnv Config
+        path: ~/.config/direnv
+  - name: bat
+    files:
+      - name: bat Config
+        path: ~/.config/bat
+  - name: btop
+    files:
+      - name: btop Config
+        path: ~/.config/btop
+  - name: htop
+    files:
+      - name: htop Config
+        path: ~/.config/htop
+  - name: Lazygit
+    files:
+      - name: User Application Support Config
+        path: ~/Library/Application Support/lazygit/config.yml
+  - name: Yazi
+    files:
+      - name: Yazi Config
+        path: ~/.config/yazi
+  # ~/.claude also holds every project's transcripts and todos, so only the
+  # user's own settings, memory, commands, agents and skills are synced.
+  - name: Claude Code
+    files:
+      - name: Claude Code Settings
+        path: ~/.claude/settings.json
+      - name: Claude Code Memory
+        path: ~/.claude/CLAUDE.md
+      - name: Claude Code Commands
+        path: ~/.claude/commands
+      - name: Claude Code Agents
+        path: ~/.claude/agents
+      - name: Claude Code Skills
+        path: ~/.claude/skills
 
   # Editors and developer tools
   - name: Vim
@@ -190,6 +243,26 @@ apps:
     files:
       - name: Neovim Config
         path: ~/.config/nvim
+  - name: Helix
+    files:
+      - name: Helix Config
+        path: ~/.config/helix
+  - name: Emacs
+    files:
+      - name: Emacs Init
+        path: ~/.emacs.d/init.el
+      - name: Emacs Early Init
+        path: ~/.emacs.d/early-init.el
+  # Doom's own install (~/.config/emacs) is rebuilt by `doom install`; only
+  # the user's config is synced.
+  - name: Doom Emacs
+    files:
+      - name: Doom Config
+        path: ~/.config/doom
+  - name: Nano
+    files:
+      - name: Nano Config
+        path: ~/.nanorc
   - name: Visual Studio Code
     files:
       - name: User Application Support Settings
@@ -206,6 +279,22 @@ apps:
         path: ~/Library/Application Support/Cursor/User/keybindings.json
       - name: User Application Support Snippets
         path: ~/Library/Application Support/Cursor/User/snippets
+  - name: VSCodium
+    files:
+      - name: User Application Support Settings
+        path: ~/Library/Application Support/VSCodium/User/settings.json
+      - name: User Application Support Keybindings
+        path: ~/Library/Application Support/VSCodium/User/keybindings.json
+      - name: User Application Support Snippets
+        path: ~/Library/Application Support/VSCodium/User/snippets
+  - name: Windsurf
+    files:
+      - name: User Application Support Settings
+        path: ~/Library/Application Support/Windsurf/User/settings.json
+      - name: User Application Support Keybindings
+        path: ~/Library/Application Support/Windsurf/User/keybindings.json
+      - name: User Application Support Snippets
+        path: ~/Library/Application Support/Windsurf/User/snippets
   - name: Zed
     files:
       - name: Zed Settings
@@ -216,6 +305,18 @@ apps:
     files:
       - name: User Application Support
         path: ~/Library/Application Support/Sublime Text/Packages/User
+  - name: Sublime Merge
+    files:
+      - name: User Application Support
+        path: ~/Library/Application Support/Sublime Merge/Packages/User
+  - name: Nova
+    files:
+      - name: User Application Support
+        path: ~/Library/Application Support/Nova
+  - name: TextMate
+    files:
+      - name: User Application Support
+        path: ~/Library/Application Support/TextMate
   - name: BBEdit
     files:
       - name: User Application Support
@@ -240,6 +341,13 @@ apps:
     files:
       - name: User Application Support
         path: ~/Library/Application Support/JetBrains
+  # Android Studio keeps its settings under Google's folder, which also holds
+  # Chrome's profile, so only the Android Studio folders are synced, one
+  # location per installed version.
+  - name: Android Studio
+    files:
+      - name: User Android Studio *
+        path: ~/Library/Application Support/Google/AndroidStudio*
   - name: Insomnia
     files:
       - name: User Application Support
@@ -276,6 +384,10 @@ apps:
     files:
       - name: Hyper Config
         path: ~/.hyper.js
+  - name: Tabby
+    files:
+      - name: User Application Support Config
+        path: ~/Library/Application Support/tabby/config.yaml
 
   # Keyboard and automation
   - name: Karabiner-Elements
@@ -290,6 +402,46 @@ apps:
     files:
       - name: User Keyboard Maestro
         path: ~/Library/Application Support/Keyboard Maestro
+  # Alfred's own folder also holds the clipboard history database, so only
+  # its preferences bundle and workflow data are synced.
+  - name: Alfred
+    files:
+      - name: User Alfred Preferences
+        path: ~/Library/Application Support/Alfred/Alfred.alfredpreferences
+      - name: User Alfred Workflow Data
+        path: ~/Library/Application Support/Alfred/Workflow Data
+  - name: Espanso
+    files:
+      - name: User Application Support
+        path: ~/Library/Application Support/espanso
+
+  # Tiling window managers and menu bars
+  - name: AeroSpace
+    files:
+      - name: AeroSpace Config
+        path: ~/.aerospace.toml
+      - name: AeroSpace XDG Config
+        path: ~/.config/aerospace
+  - name: Amethyst
+    files:
+      - name: Amethyst Config
+        path: ~/.amethyst.yml
+  - name: yabai
+    files:
+      - name: yabai Config
+        path: ~/.config/yabai
+  - name: skhd
+    files:
+      - name: skhd Config
+        path: ~/.config/skhd
+  - name: SketchyBar
+    files:
+      - name: SketchyBar Config
+        path: ~/.config/sketchybar
+  - name: JankyBorders
+    files:
+      - name: Borders Config
+        path: ~/.config/borders
 
   # Music and audio
   # Plug-in installers write into the Audio folders as root, and failed when
@@ -355,6 +507,51 @@ apps:
     files:
       - name: User Documents
         path: ~/Documents/Image-Line
+  # Plug-in settings, I/O settings and session templates.
+  - name: Pro Tools
+    files:
+      - name: User Documents
+        path: ~/Documents/Pro Tools
+  # Steinberg keeps each Cubase version's settings (key commands, templates,
+  # presets) in a folder, not a plist; licensing lives elsewhere.
+  - name: Cubase
+    files:
+      - name: User Preferences Cubase *
+        path: ~/Library/Preferences/Cubase *
+
+  # Video
+  # ProApps is shared by Final Cut Pro, Motion and Compressor: effects
+  # presets, share destinations and Compressor settings. Motion Templates
+  # holds custom titles, effects and generators (".localized" on disk).
+  - name: Final Cut Pro
+    files:
+      - name: User Application Support
+        path: ~/Library/Application Support/ProApps
+      - name: Motion Templates
+        path: ~/Movies/Motion Templates*
+  # Blackmagic Design's folder also holds Resolve's project database and
+  # caches, so only user LUTs and Fusion templates, macros and scripts are
+  # synced.
+  - name: DaVinci Resolve
+    files:
+      - name: User DaVinci Resolve LUT
+        path: ~/Library/Application Support/Blackmagic Design/DaVinci Resolve/LUT
+      - name: User DaVinci Resolve Fusion
+        path: ~/Library/Application Support/Blackmagic Design/DaVinci Resolve/Fusion
+  # OBS profiles hold stream keys, so only scene collections are synced.
+  - name: OBS Studio
+    files:
+      - name: User OBS Scenes
+        path: ~/Library/Application Support/obs-studio/basic/scenes
+  # VLC's preferences are a folder (vlcrc), not a plist.
+  - name: VLC
+    files:
+      - name: User Preferences
+        path: ~/Library/Preferences/org.videolan.vlc
+  - name: mpv
+    files:
+      - name: mpv Config
+        path: ~/.config/mpv
 
   # Design and 3D
   - name: Sketch
@@ -365,6 +562,12 @@ apps:
     files:
       - name: User Application Support
         path: ~/Library/Application Support/Blender
+
+  # Writing
+  - name: Typora
+    files:
+      - name: User Typora Themes
+        path: ~/Library/Application Support/abnerworks.Typora/themes
 
   # Adobe. ~/Library/Application Support/Adobe also holds Creative Cloud's
   # sign-in and licensing (OOBE, SLStore) and the shared media caches (Common,

@@ -111,7 +111,7 @@ enum MacDefaultsEnforcer {
         var failed: [String] = []
     }
 
-    static let log = Logger(subsystem: "alexvaos.Takeover", category: "mac-defaults")
+    static let log = Logger(subsystem: "org.perfectink.takeover", category: "mac-defaults")
 
     // Shared with the other process (app or agent) through the app's defaults.
     nonisolated static let localWriteKey = "takeover.macDefaultsLocalWrite"

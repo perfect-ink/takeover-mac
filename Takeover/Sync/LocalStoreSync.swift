@@ -9,7 +9,7 @@ import Foundation
 enum LocalStoreSync {
     static let interval: UInt64 = 10 * 60 * 1_000_000_000
 
-    private static let queue = DispatchQueue(label: "alexvaos.Takeover.local-store-backup", qos: .utility)
+    private static let queue = DispatchQueue(label: "org.perfectink.takeover.local-store-backup", qos: .utility)
 
     /// Backs up every linked local-store location in the settings file, off
     /// the main thread and one run at a time.

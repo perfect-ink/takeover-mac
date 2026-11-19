@@ -8,6 +8,11 @@ Takeover.app/Contents/Library/LaunchAgents by the "Embed Launch Agents" build
 phase and registered with SMAppService.agent(plistName:) by BackgroundAgent.
 It runs the app's own binary with --defaults-agent, so it shares the app's
 signature, Keychain access and Full Disk Access grant.
+
+The label and file name still say alexvaos.Takeover on purpose: the app's
+bundle ID moved to org.perfectink.takeover, and keeping the label lets the
+already-registered agent and the new registration stay one launchd job
+instead of two.
 -->
 <dict>
 	<key>Label</key>
@@ -21,7 +26,7 @@ signature, Keychain access and Full Disk Access grant.
 	</array>
 	<key>AssociatedBundleIdentifiers</key>
 	<array>
-		<string>alexvaos.Takeover</string>
+		<string>org.perfectink.takeover</string>
 	</array>
 	<key>RunAtLoad</key>
 	<true/>

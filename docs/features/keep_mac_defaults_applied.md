@@ -12,7 +12,7 @@ The Mac defaults a user picks (the ones with a value in `mac-defaults.yaml` in t
 ## How it works
 
 - **One binary, two roles.** `TakeoverMain` starts the app, or, when launchd passes `--defaults-agent`, `DefaultsAgent`: no window or Dock icon, runs for the whole login session.
-- **Registration.** `BackgroundAgent` registers `Takeover/LaunchAgents/alexvaos.Takeover.DefaultsAgent.plist` (copied to `Takeover.app/Contents/Library/LaunchAgents` by the "Embed Launch Agents" build phase) with `SMAppService.agent`. The plist has `RunAtLoad` (login) and restarts the helper if it crashes. Only a copy in `/Applications` registers itself at launch, so `make dev` builds don't become the login helper; the switch registers any copy.
+- **Registration.** `BackgroundAgent` registers `Takeover/LaunchAgents/org.perfectink.takeover.DefaultsAgent.plist` (copied to `Takeover.app/Contents/Library/LaunchAgents` by the "Embed Launch Agents" build phase) with `SMAppService.agent`. The plist has `RunAtLoad` (login) and restarts the helper if it crashes. Only a copy in `/Applications` registers itself at launch, so `make dev` builds don't become the login helper; the switch registers any copy.
 - **At login / helper start:** `MacDefaultsEnforcer.enforceFile(trigger: .startup)` reads every chosen default (`defaults read`), writes only the ones that differ (bools, ints and floats compare by meaning, so `true` equals `1`), then runs each needed follow-up (`killall Dock`, `killall Finder`…) once.
 - **File changes:** `FolderWatcher` (FSEvents) watches the settings folder and the storage choice (`storage.yaml`). A new `mac-defaults.yaml` is applied the same way. Contents already checked are skipped, and so are edits made in this Mac's own Mac Defaults tab (`SettingsManager` marks them in `takeover.macDefaultsLocalWrite`), because typing a value shouldn't restart the Dock on each keystroke; the tab's Apply buttons apply those, and the next login enforces them.
 - **Takeover Cloud:** while the app is closed, the helper pulls a newer profile every 3 minutes (`ProfileSyncManager.pullIfNewer`, never pushes). The pull rewrites the files, which the watcher then applies. While the app is open, the app does its own pulls.
@@ -20,7 +20,7 @@ The Mac defaults a user picks (the ones with a value in `mac-defaults.yaml` in t
 - **Which defaults:** catalog defaults take their domain/key/type/follow-up from the catalog (same as the tab); custom ones use their own. Catalog defaults the catalog hides on this macOS version are skipped.
 - **Restore:** Apply All in the Restore tab applies picked defaults through `MacDefaultsEnforcer.enforce(_ configs:)` too, so they show "applied" or "already set" and each follow-up runs once.
 
-Logs: `log stream --predicate 'subsystem == "alexvaos.Takeover"'` (categories `defaults-agent` and `mac-defaults`).
+Logs: `log stream --predicate 'subsystem == "org.perfectink.takeover"'` (categories `defaults-agent` and `mac-defaults`).
 
 ## Tests
 

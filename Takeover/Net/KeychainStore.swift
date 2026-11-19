@@ -5,7 +5,10 @@ import Security
 // Takeover is unsandboxed, so default Keychain access works with no extra
 // entitlement. Ported from AudioBunny.
 enum KeychainStore {
-    private static var service: String { Bundle.main.bundleIdentifier ?? "alexvaos.Takeover" }
+    // Fixed rather than the bundle ID: items were saved under the app's first
+    // bundle ID, alexvaos.Takeover, and must stay readable after the move to
+    // org.perfectink.takeover so nobody is signed out of Takeover Cloud.
+    private static let service = "alexvaos.Takeover"
 
     static func get(key: String) -> String? {
         var query = baseQuery(key: key)

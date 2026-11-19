@@ -24,6 +24,10 @@
 # The Mac app keys locations by app and path, so renaming one offers Rename
 # and Move.
 #
+# Every source appears once in the whole catalog, never in two recipes and
+# never inside another recipe's folder (Alex, 2026-11-19); the catalog test
+# enforces it.
+#
 # A path may use `*` for one path component's varying part, e.g. an app's
 # version in its name; the Mac app adds one location per match on that Mac
 # and puts the matched text where the location's name has its `*`.
@@ -35,7 +39,7 @@
 # this file: the Mac app keeps whichever copy (fetched, cached or bundled) has
 # the highest version, and CI refuses a change that doesn't raise it
 # (bin/check-catalog-versions).
-version: 9
+version: 10
 
 os_recipies:
   - name: Dock Orientation

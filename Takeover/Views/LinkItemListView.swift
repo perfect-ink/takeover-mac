@@ -285,7 +285,7 @@ struct LinkItemListView: View {
     private func seedFromCatalog() {
         guard let apps = repository.response?.apps else { return }
         var all = (try? modelContext.fetch(FetchDescriptor<LinkItem>())) ?? []
-        var added = false
+        var added = RecipeInstaller.followCatalogApps(all, apps: apps)
         for app in apps {
             let have = Set(all
                 .filter { RecipeInstaller.baseName($0.name) == app.name }

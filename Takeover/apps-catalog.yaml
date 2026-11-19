@@ -11,9 +11,10 @@
 # data (moving it can deactivate a plug-in). When a vendor keeps its apps' settings under one company folder
 # (Native Instruments, Ableton, Image-Line, JetBrains), sync the whole company
 # folder rather than one app's subfolder. Exception: /Library/Application
-# Support/Native Instruments stays a real folder, and each product folder in
-# it is its own location, leaving out NTK and Service Center (licensing and
-# activation, which NI's installers and Native Access manage).
+# Support/Native Instruments stays a real folder, and each NI product has its
+# own recipe for its folder there ("Native Instruments Guitar Rig"), leaving
+# out NTK and Service Center (licensing and activation, which NI's installers
+# and Native Access manage).
 #
 # Location names follow the location, not the app: paths in ~/Library start
 # with "User" ("User Application Support", "User Preferences"), paths in
@@ -34,7 +35,7 @@
 # this file: the Mac app keeps whichever copy (fetched, cached or bundled) has
 # the highest version, and CI refuses a change that doesn't raise it
 # (bin/check-catalog-versions).
-version: 8
+version: 9
 
 os_recipies:
   - name: Dock Orientation
@@ -72,68 +73,79 @@ apps:
     files:
       - name: User Application Support
         path: ~/Library/Application Support/com.tinyapp.TablePlus
+  # Native Instruments: /Library/Application Support/Native Instruments stays
+  # a real folder (NI's installers write NTK and Service Center there, which
+  # aren't synced), and each product's folder in it belongs to that product's
+  # own recipe below. The company recipe keeps the shared folders and the
+  # user folders, which NI keeps per company, not per product.
   - name: Native Instruments
     files:
-      - name: Library Battery 4
-        path: /Library/Application Support/Native Instruments/Battery 4
       - name: Library Controller Editor
         path: /Library/Application Support/Native Instruments/Controller Editor
-      - name: Library Dirt
-        path: /Library/Application Support/Native Instruments/Dirt
       - name: Library Driver
         path: /Library/Application Support/Native Instruments/Driver
-      - name: Library FM8
-        path: /Library/Application Support/Native Instruments/FM8
-      - name: Library Guitar Rig 2
-        path: /Library/Application Support/Native Instruments/Guitar Rig 2
-      - name: Library Guitar Rig 4
-        path: /Library/Application Support/Native Instruments/Guitar Rig 4
-      - name: Library Guitar Rig 5
-        path: /Library/Application Support/Native Instruments/Guitar Rig 5
-      - name: Library Guitar Rig 6
-        path: /Library/Application Support/Native Instruments/Guitar Rig 6
-      - name: Library Guitar Rig 7
-        path: /Library/Application Support/Native Instruments/Guitar Rig 7
       - name: Library Hardware
         path: /Library/Application Support/Native Instruments/Hardware
       - name: Library Host Integration
         path: /Library/Application Support/Native Instruments/Host Integration
-      - name: Library Komplete Kontrol
-        path: /Library/Application Support/Native Instruments/Komplete Kontrol
-      - name: Library Kontakt
-        path: /Library/Application Support/Native Instruments/Kontakt
-      - name: Library Kontakt 6
-        path: /Library/Application Support/Native Instruments/Kontakt 6
-      - name: Library Kontakt 7
-        path: /Library/Application Support/Native Instruments/Kontakt 7
-      - name: Library Kontakt 8
-        path: /Library/Application Support/Native Instruments/Kontakt 8
-      - name: Library Kore 2
-        path: /Library/Application Support/Native Instruments/Kore 2
-      - name: Library Maschine 2
-        path: /Library/Application Support/Native Instruments/Maschine 2
-      - name: Library Maschine 3
-        path: /Library/Application Support/Native Instruments/Maschine 3
-      - name: Library Massive
-        path: /Library/Application Support/Native Instruments/Massive
-      - name: Library Massive X
-        path: /Library/Application Support/Native Instruments/Massive X
-      - name: Library Reaktor 6
-        path: /Library/Application Support/Native Instruments/Reaktor 6
       - name: Library Shared Content
         path: /Library/Application Support/Native Instruments/Shared Content
-      - name: Library Solid Bus Comp FX
-        path: /Library/Application Support/Native Instruments/Solid Bus Comp FX
-      - name: Library Solid Dynamics
-        path: /Library/Application Support/Native Instruments/Solid Dynamics
-      - name: Library Solid EQ
-        path: /Library/Application Support/Native Instruments/Solid EQ
-      - name: Library Supercharger GT
-        path: /Library/Application Support/Native Instruments/Supercharger GT
       - name: User Application Support
         path: ~/Library/Application Support/Native Instruments
       - name: User Documents
         path: ~/Documents/Native Instruments
+  - name: Native Instruments Battery
+    files:
+      - name: Library Battery *
+        path: /Library/Application Support/Native Instruments/Battery *
+  - name: Native Instruments FM8
+    files:
+      - name: Library FM8
+        path: /Library/Application Support/Native Instruments/FM8
+  - name: Native Instruments Guitar Rig
+    files:
+      - name: Library Guitar Rig *
+        path: /Library/Application Support/Native Instruments/Guitar Rig *
+  - name: Native Instruments Komplete Kontrol
+    files:
+      - name: Library Komplete Kontrol
+        path: /Library/Application Support/Native Instruments/Komplete Kontrol
+  - name: Native Instruments Kontakt
+    files:
+      - name: Library Kontakt
+        path: /Library/Application Support/Native Instruments/Kontakt
+      - name: Library Kontakt *
+        path: /Library/Application Support/Native Instruments/Kontakt *
+  - name: Native Instruments Kore
+    files:
+      - name: Library Kore *
+        path: /Library/Application Support/Native Instruments/Kore *
+  - name: Native Instruments Maschine
+    files:
+      - name: Library Maschine *
+        path: /Library/Application Support/Native Instruments/Maschine *
+  - name: Native Instruments Massive
+    files:
+      - name: Library Massive
+        path: /Library/Application Support/Native Instruments/Massive
+      - name: Library Massive X
+        path: /Library/Application Support/Native Instruments/Massive X
+  - name: Native Instruments Reaktor
+    files:
+      - name: Library Reaktor *
+        path: /Library/Application Support/Native Instruments/Reaktor *
+  - name: Native Instruments Dirt
+    files:
+      - name: Library Dirt
+        path: /Library/Application Support/Native Instruments/Dirt
+  - name: Native Instruments Solid Mix Series
+    files:
+      - name: Library Solid *
+        path: /Library/Application Support/Native Instruments/Solid *
+  - name: Native Instruments Supercharger
+    files:
+      - name: Library Supercharger GT
+        path: /Library/Application Support/Native Instruments/Supercharger GT
 
   # Shells and command-line tools
   - name: Git

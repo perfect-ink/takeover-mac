@@ -326,6 +326,25 @@ struct TakeoverTests {
         ])
     }
 
+    /// Guitar Rig's folder moved from the Native Instruments recipe to its own:
+    /// the existing location joins the new app instead of being added twice.
+    @Test func locationsFollowAPathToItsNewCatalogApp() {
+        let gr = "/Library/Application Support/Native Instruments/Guitar Rig 7"
+        let apps = [
+            AppConfig(name: "Native Instruments", files: [FileConfig(path: "~/Documents/Native Instruments", name: "User Documents")], defaults: nil),
+            AppConfig(name: "Native Instruments Guitar Rig", files: [FileConfig(path: gr, name: "Library Guitar Rig 7")], defaults: nil),
+        ]
+        let moved = LinkItem(name: "Native Instruments (3)", from: gr, to: "Native Instruments/Library Guitar Rig 7")
+        let stays = LinkItem(name: "Native Instruments", from: "~/Documents/Native Instruments", to: "Native Instruments/User Documents")
+        let own = LinkItem(name: "My Rig", from: gr, to: "Mine")
+
+        #expect(RecipeInstaller.followCatalogApps([moved, stays, own], apps: apps))
+        #expect(moved.name == "Native Instruments Guitar Rig")
+        #expect(stays.name == "Native Instruments")
+        #expect(own.name == "My Rig")
+        #expect(!RecipeInstaller.followCatalogApps([moved, stays, own], apps: apps))
+    }
+
     @Test func distinguishingPartIsWhereThePathsDiffer() {
         #expect(RecipeInstaller.distinguishingPart(of: "~/Library/Audio/Plug-Ins", from: "/Library/Audio/Plug-Ins") == "User")
         #expect(RecipeInstaller.distinguishingPart(of: "/Library/Audio/Plug-Ins", from: "~/Library/Audio/Plug-Ins") == "System")

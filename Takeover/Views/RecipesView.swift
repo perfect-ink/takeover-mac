@@ -120,6 +120,32 @@ enum RecipeInstaller {
         return base
     }
 
+    /// A location whose app no longer lists its path, while another catalog app
+    /// does (Guitar Rig's folder moved from Native Instruments to Native
+    /// Instruments Guitar Rig), joins that app instead of being added twice.
+    /// Renaming it is enough: its destination then follows the catalog like any
+    /// renamed location (moved silently when nothing is on disk, asked about
+    /// otherwise). Locations of the user's own (not named for a catalog app)
+    /// are left alone. Returns whether anything changed.
+    static func followCatalogApps(_ items: [LinkItem], apps: [AppConfig]) -> Bool {
+        let appNames = Set(apps.map(\.name))
+        var owner: [String: String] = [:]
+        for app in apps {
+            for file in app.files { owner[PathUtility.expandTildeToRealHome(file.path)] = owner[PathUtility.expandTildeToRealHome(file.path)] ?? app.name }
+        }
+        var changed = false
+        for item in items where !item.from.isEmpty {
+            let current = baseName(item.name)
+            let from = PathUtility.expandTildeToRealHome(item.from)
+            guard appNames.contains(current), let newApp = owner[from], newApp != current,
+                  !(apps.first { $0.name == current }?.files.contains { PathUtility.expandTildeToRealHome($0.path) == from } ?? false)
+            else { continue }
+            item.name = uniqueName(base: newApp, taken: Set(items.filter { $0 !== item }.map(\.name)))
+            changed = true
+        }
+        return changed
+    }
+
     /// First free "App", "App (2)", "App (3)"...
     static func uniqueName(base: String, taken: Set<String>) -> String {
         if !taken.contains(base) { return base }

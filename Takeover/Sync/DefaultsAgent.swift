@@ -20,7 +20,7 @@ final class DefaultsAgent {
     static let launchArgument = "--defaults-agent"
     static let shared = DefaultsAgent()
 
-    private let log = Logger(subsystem: "alexvaos.Takeover", category: "defaults-agent")
+    private let log = Logger(subsystem: "org.perfectink.takeover", category: "defaults-agent")
     private var watcher: FolderWatcher?
     private var watchedFolder: String?
 

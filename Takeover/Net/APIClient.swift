@@ -3,7 +3,7 @@ import Foundation
 /// REST client for takeover-api. JWT is kept in the Keychain. Base URL is
 /// takeoverapp.site (`Config.apiBaseURL`), overridable for local development
 /// via `UserDefaults` key `takeover.apiBaseURL` (e.g.
-/// `defaults write alexvaos.Takeover takeover.apiBaseURL http://localhost:3020/api/v1`).
+/// `defaults write org.perfectink.takeover takeover.apiBaseURL http://localhost:3020/api/v1`).
 /// This is the only sign-in the app has: Account, Restore and Takeover Cloud
 /// all share this token.
 enum APIClient {

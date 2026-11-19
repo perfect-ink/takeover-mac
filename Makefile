@@ -6,7 +6,7 @@ SCHEME      := Takeover
 CLI_SCHEME  := TakeoverCLI
 CLI_NAME    := takeover
 PROJECT     := Takeover.xcodeproj
-BUNDLE_ID   := alexvaos.Takeover
+BUNDLE_ID   := org.perfectink.takeover
 
 BUILD_DIR   := build
 DEV_APP     := $(BUILD_DIR)/Build/Products/Debug/$(APP).app
